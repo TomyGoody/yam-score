@@ -64,6 +64,7 @@ const [editingName, setEditingName] = useState("");
   const [scoreInput, setScoreInput] = useState("");
   const [fitToScreen, setFitToScreen] = useState(false);
   const [fitScale, setFitScale] = useState(1);
+  const [fitOffsetX, setFitOffsetX] = useState(0);
 const [hasSavedGame, setHasSavedGame] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -81,33 +82,44 @@ useEffect(() => {
     setHasSavedGame(true);
   }
 }, []);
-  useEffect(() => {
-    if (!fitToScreen) {
-      setFitScale(1);
-      return;
-    }
+ useEffect(() => {
+  function updateLayout() {
+    const viewport = viewportRef.current;
+    const sheet = sheetRef.current;
 
-    function updateScale() {
-      const viewport = viewportRef.current;
-      const sheet = sheetRef.current;
+    if (!viewport || !sheet) return;
 
-      if (!viewport || !sheet) return;
+    const contentWidth = sheet.scrollWidth;
+    const contentHeight = sheet.scrollHeight;
 
+    let nextScale = 1;
+
+    if (fitToScreen) {
       const safePadding = 24;
-      const scaleX = (viewport.clientWidth - safePadding) / sheet.scrollWidth;
-      const scaleY = (viewport.clientHeight - safePadding) / sheet.scrollHeight;
+      const scaleX = (viewport.clientWidth - safePadding) / contentWidth;
+      const scaleY = (viewport.clientHeight - safePadding) / contentHeight;
 
-      setFitScale(Math.min(scaleX, scaleY));
+      nextScale = Math.min(scaleX, scaleY);
     }
 
-    const frame = requestAnimationFrame(updateScale);
-    window.addEventListener("resize", updateScale);
+    const scaledWidth = contentWidth * nextScale;
+    const nextOffsetX = Math.max(
+      0,
+      (viewport.clientWidth - scaledWidth) / 2
+    );
 
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updateScale);
-    };
-  }, [fitToScreen, players.length]);
+    setFitScale(nextScale);
+    setFitOffsetX(nextOffsetX);
+  }
+
+  const frame = requestAnimationFrame(updateLayout);
+  window.addEventListener("resize", updateLayout);
+
+  return () => {
+    cancelAnimationFrame(frame);
+    window.removeEventListener("resize", updateLayout);
+  };
+}, [fitToScreen, players.length, gameMode]);
   useEffect(() => {
   if (players.length === 0) return;
 
@@ -447,7 +459,12 @@ useEffect(() => {
 resumeGame={resumeGame}
 />
       ) : (
-        <section className="flex h-full flex-col">
+        <section className="relative flex h-full flex-col overflow-hidden">
+  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+    <div className="select-none text-[28rem] opacity-[0.09]">
+      🎲
+    </div>
+  </div>
           <GameToolbar
             fitToScreen={fitToScreen}
             setFitToScreen={setFitToScreen}
@@ -456,28 +473,28 @@ resumeGame={resumeGame}
           />
 
           <div
-            className={[
-              "flex flex-1 gap-3 p-3",
-              useSideLeaderboard ? "flex-row" : "flex-col",
-            ].join(" ")}
-          >
-            <div
-              ref={viewportRef}
-              className={[
-                "flex-1",
-                fitToScreen
-                  ? "overflow-hidden"
-                  : "overflow-x-auto overflow-y-hidden",
-              ].join(" ")}
-            >
-              <div
-                ref={sheetRef}
-                style={{
-                  transform: fitToScreen ? `scale(${fitScale})` : "none",
-                  transformOrigin: "top left",
-                }}
-                className="flex w-max items-start gap-3"
-              >
+  className={[
+    "relative z-10 flex flex-1 gap-3 p-3",
+    useSideLeaderboard ? "flex-row" : "flex-col",
+  ].join(" ")}
+>
+  <div
+    ref={viewportRef}
+    className={[
+      "flex-1",
+      fitToScreen
+        ? "overflow-hidden"
+        : "overflow-x-auto overflow-y-hidden",
+    ].join(" ")}
+  >
+    <div
+  ref={sheetRef}
+  style={{
+    transform: `translateX(${fitOffsetX}px) scale(${fitScale})`,
+    transformOrigin: "top left",
+  }}
+  className="flex w-max items-start gap-3"
+>
                 {players.map((player) => (
                   <PlayerSheet
   key={player.id}
@@ -775,7 +792,9 @@ function getPlayerColor(playerId: string) {
     <aside
       className={[
         "rounded-xl border border-slate-800 bg-black p-3",
-        layout === "side" ? "w-72 shrink-0" : "w-full shrink-0",
+        layout === "side"
+  ? "w-56 shrink-0"
+  : "w-full shrink-0",
       ].join(" ")}
     >
       <h3 className="mb-3 text-sm font-black uppercase text-cyan-300">
@@ -946,7 +965,7 @@ const color =
         <thead>
           <tr>
             <th className="w-16"></th>
-            {activeColumns.map((column) => (
+            {activeColumns.map((column, columnIndex) => (
               <th
                 key={column.id}
                 className="h-6 w-10 text-xl font-black text-slate-100"
@@ -964,7 +983,7 @@ const color =
             <tr key={row.id}>
               <RowLabel label={row.label} />
 
-              {activeColumns.map((column) => (
+              {activeColumns.map((column, columnIndex) => (
                 <ScoreCell
                   key={`${column.id}-${row.id}`}
                   playerId={player.id}
@@ -975,6 +994,10 @@ const color =
                   value={getScore(player.id, column.id, row.id)}
                   playable={isCellPlayable(player.id, column.id, row.id)}
                   onSelectCell={onSelectCell}
+				  blockStart={
+  columnIndex > 0 &&
+  activeColumns[columnIndex - 1].type !== column.type
+}
                 />
               ))}
             </tr>
@@ -982,15 +1005,17 @@ const color =
 
           <TotalRow
             label="Total"
-            cells={activeColumns.map((column) => getTopTotal(player.id, column.id))}
+            cells={activeColumns.map((column, columnIndex) => getTopTotal(player.id, column.id))}
             labelClassName="bg-slate-700 text-white"
+			activeColumns={activeColumns}
             cellClassName="bg-slate-200 text-rose-700"
           />
 
           <TotalRow
             label="Bonus"
-            cells={activeColumns.map((column) => getBonus(player.id, column.id))}
+            cells={activeColumns.map((column, columnIndex) => getBonus(player.id, column.id))}
             labelClassName="bg-cyan-700 text-white"
+			activeColumns={activeColumns}
             cellClassName="bg-cyan-100 text-slate-950"
           />
 
@@ -1003,6 +1028,7 @@ const color =
             )}
             labelClassName="bg-slate-700 text-white"
             cellClassName="bg-slate-300 text-white"
+			activeColumns={activeColumns}
           />
 
           <tr>
@@ -1024,16 +1050,18 @@ const color =
 
           <TotalRow
             label="Total"
-            cells={activeColumns.map((column) => getBottomTotal(player.id, column.id))}
+            cells={activeColumns.map((column, columnIndex) => getBottomTotal(player.id, column.id))}
             labelClassName="bg-slate-700 text-white"
             cellClassName="bg-slate-200 text-rose-700"
+			activeColumns={activeColumns}
           />
 
           <TotalRow
             label="Final"
-            cells={activeColumns.map((column) => getGrandTotal(player.id, column.id))}
+            cells={activeColumns.map((column, columnIndex) => getGrandTotal(player.id, column.id))}
             labelClassName="bg-indigo-700 text-white"
             cellClassName="bg-indigo-100 text-slate-950"
+			activeColumns={activeColumns}
           />
         </tbody>
       </table>
@@ -1077,7 +1105,7 @@ function FragmentRow({
       <tr>
         <RowLabel label={row.label} />
 
-        {activeColumns.map((column) => (
+        {activeColumns.map((column, columnIndex) => (
           <ScoreCell
             key={`${column.id}-${row.id}`}
             playerId={player.id}
@@ -1088,6 +1116,10 @@ function FragmentRow({
             value={getScore(player.id, column.id, row.id)}
             playable={isCellPlayable(player.id, column.id, row.id)}
             onSelectCell={onSelectCell}
+			blockStart={
+  columnIndex > 0 &&
+  activeColumns[columnIndex - 1].type !== column.type
+}
           />
         ))}
       </tr>
@@ -1097,7 +1129,7 @@ function FragmentRow({
 
 function RowLabel({ label }: { label: string }) {
   return (
-    <th className="h-6 w-14 border border-slate-900 bg-slate-900 px-2 text-left text-xs font-black text-slate-100">
+    <th className="h-6 w-14 border border-slate-900 bg-slate-900 text-center text-xs font-black text-slate-100">
       {label}
     </th>
   );
@@ -1112,6 +1144,7 @@ function ScoreCell({
   value,
   playable,
   onSelectCell,
+  blockStart,
 }: {
   playerId: string;
   columnId: string;
@@ -1121,6 +1154,7 @@ function ScoreCell({
   value: ScoreValue;
   playable: boolean;
   onSelectCell: (cell: SelectedCell) => void;
+  blockStart: boolean;
 }) {
   const colorClass =
     section === "top" ? getTopColor(rowIndex) : getBottomColor(rowIndex);
@@ -1133,6 +1167,7 @@ function ScoreCell({
       }}
       className={[
         "h-6 w-10 border border-slate-950 text-sm font-black transition-all",
+		blockStart ? "border-l-4 border-l-black" : "",
         colorClass,
         playable
           ? "cursor-pointer text-slate-950 hover:brightness-110"
@@ -1147,11 +1182,13 @@ function ScoreCell({
 function TotalRow({
   label,
   cells,
+  activeColumns,
   labelClassName,
   cellClassName,
 }: {
   label: string;
   cells: number[];
+  activeColumns: typeof columns;
   labelClassName: string;
   cellClassName: string;
 }) {
@@ -1159,24 +1196,31 @@ function TotalRow({
     <tr>
       <th
         className={[
-          "h-6 w-14 border border-slate-950 px-2 text-left text-xs font-black",
-          labelClassName,
-        ].join(" ")}
+  "h-6 w-14 border border-slate-950 text-center text-xs font-black",
+  labelClassName,
+].join(" ")}
       >
         {label}
       </th>
 
-      {cells.map((value, index) => (
-        <td
-          key={index}
-          className={[
-            "h-6 w-10 border border-slate-950 text-sm font-black",
-            cellClassName,
-          ].join(" ")}
-        >
-          {value}
-        </td>
-      ))}
+      {cells.map((value, index) => {
+  const blockStart =
+    index > 0 &&
+    activeColumns[index - 1].type !== activeColumns[index].type;
+
+  return (
+    <td
+      key={index}
+      className={[
+        "h-6 w-10 border border-slate-950 text-sm font-black",
+        blockStart ? "border-l-4 border-l-black" : "",
+        cellClassName,
+      ].join(" ")}
+    >
+      {value}
+    </td>
+  );
+})}
     </tr>
   );
 }
