@@ -61,7 +61,10 @@ const [editingName, setEditingName] = useState("");
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [scores, setScores] = useState<Scores>({});
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
-  
+  const [lastScoreAnimation, setLastScoreAnimation] = useState<{
+  playerId: string;
+  value: number;
+} | null>(null);
   const [scoreInput, setScoreInput] = useState("");
   const [pendingCell, setPendingCell] = useState<SelectedCell | null>(null);
   const [fitToScreen, setFitToScreen] = useState(false);
@@ -304,7 +307,17 @@ function confirmQuitGame() {
         },
       },
     }));
+if (typeof value === "number") {
+  setLastScoreAnimation({
+    playerId,
+    value,
+	
+  });
 
+  setTimeout(() => {
+    setLastScoreAnimation(null);
+  }, 800);
+}
     closeModal();
   }
 
@@ -475,11 +488,7 @@ resumeGame={resumeGame}
 />
       ) : (
         <section className="relative flex h-full flex-col overflow-hidden">
-  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-    <div className="select-none text-[70rem] opacity-[0.09]">
-      🎲
-    </div>
-  </div>
+  
           <GameToolbar
             fitToScreen={fitToScreen}
             setFitToScreen={setFitToScreen}
@@ -531,6 +540,7 @@ setEditingPlayerId={setEditingPlayerId}
 activeColumns={activeColumns}
 currentPlayerId={currentPlayerId}
 gameFinished={gameFinished}
+lastScoreAnimation={lastScoreAnimation}
 />
                 ))}
               </div>
@@ -945,6 +955,7 @@ setEditingPlayerId,
 activeColumns,
 currentPlayerId,
 gameFinished,
+lastScoreAnimation,
 }: {
   player: Player;
   getScore: (playerId: string, columnId: string, rowId: YamRow) => ScoreValue;
@@ -967,6 +978,10 @@ setEditingName: (value: string) => void;
 savePlayerName: (playerId: string) => void;
 setEditingPlayerId: (value: string | null) => void;
 activeColumns: typeof columns;
+lastScoreAnimation: {
+  playerId: string;
+  value: number;
+} | null;
 }) {
   const bottomRows = rows.slice(6);
 const playerIndex =
@@ -980,7 +995,7 @@ const color =
     <div
   className={`shrink-0 rounded-xl border-2 ${color.border} bg-black p-2`}
 >
-     <div className="mb-1 text-center">
+     <div className="relative mb-1 text-center">
   <div className="flex items-center justify-center gap-2">
     {editingPlayerId === player.id ? (
       <input
@@ -1032,6 +1047,11 @@ const color =
   <div className={`text-3xl font-black ${color.text}`}>
     {getPlayerTotal(player.id)}
   </div>
+  {lastScoreAnimation?.playerId === player.id && (
+  <div className={`pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black animate-score-pop ${color.text}`}>
+    +{lastScoreAnimation.value}
+  </div>
+)}
   <div className="h-5 mt-1">
   {isCurrentPlayer && !gameFinished && (
     <div
