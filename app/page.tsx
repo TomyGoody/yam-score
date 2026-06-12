@@ -1032,7 +1032,7 @@ const color =
   player.id === currentPlayerId;
   return (
     <div
-  className={`shrink-0 rounded-xl border-2 ${color.border} bg-black p-2`}
+  className={`shrink-0 rounded-xl border-2 ${color.border} bg-black p-4`}
 >
      <div className="relative mb-1 text-center">
   <div className="flex items-center justify-center gap-2">
