@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { columns, rows, YamRow } from "./lib/yamRules";
 import { Pencil } from "lucide-react";
-
+import Image from "next/image";
 type ScoreValue = number | "X" | null;
 
 type Player = {
@@ -63,7 +63,9 @@ const [editingName, setEditingName] = useState("");
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const [lastScoreAnimation, setLastScoreAnimation] = useState<{
   playerId: string;
-  value: number;
+  columnId: string;
+  rowId: string;
+  value: number | "X";
 } | null>(null);
   const [scoreInput, setScoreInput] = useState("");
   const [pendingCell, setPendingCell] = useState<SelectedCell | null>(null);
@@ -307,17 +309,16 @@ function confirmQuitGame() {
         },
       },
     }));
-if (typeof value === "number") {
-  setLastScoreAnimation({
-    playerId,
-    value,
-	
-  });
+setLastScoreAnimation({
+  playerId,
+  columnId,
+  rowId,
+  value,
+});
 
-  setTimeout(() => {
-    setLastScoreAnimation(null);
-  }, 800);
-}
+setTimeout(() => {
+  setLastScoreAnimation(null);
+}, 800);
     closeModal();
   }
 
@@ -488,7 +489,15 @@ resumeGame={resumeGame}
 />
       ) : (
         <section className="relative flex h-full flex-col overflow-hidden">
-  
+  <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
+  <Image
+    src="/favicon.png"
+    alt=""
+    width={1000}
+    height={1000}
+    className="select-none rotate-[-12deg]"
+  />
+</div>
           <GameToolbar
             fitToScreen={fitToScreen}
             setFitToScreen={setFitToScreen}
@@ -689,15 +698,31 @@ setGameMode: (mode: "6cols" | "3cols") => void;
 resumeGame: () => void;
 }) {
   return (
-    <section className="flex h-full items-center justify-center px-4">
-      <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-black p-8 shadow-2xl">
+    <section className="relative flex h-full items-center justify-center px-4 overflow-hidden">
+	<div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
+  <Image
+    src="/favicon.png"
+    alt=""
+    width={1000}
+    height={1000}
+    className="select-none rotate-[-12deg]"
+  />
+</div>
+      <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-black p-8 shadow-2xl">
+	  
         <div className="mb-8 text-center">
-          <h1 className="text-5xl font-black">Yam Score</h1>
+		
+          <h1 className="text-6xl font-black tracking-tight">
+  Yam Score
+</h1>
+<div className="mt-2 text-cyan-400 font-black">
+  🎲 Feuille de score numérique
+</div>
           <p className="mt-3 text-slate-400">
             Une feuille de score simple pour vos parties de Yam.
           </p>
         </div>
-
+<div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
         <label className="block text-sm font-bold text-slate-300">
           Nombre de joueurs
         </label>
@@ -718,6 +743,7 @@ resumeGame: () => void;
       {count}
     </button>
   ))}
+  
 </div>
 <p className="mt-2 text-sm text-slate-400">
   {playerCount} joueur{playerCount > 1 ? "s" : ""} sélectionné
@@ -726,7 +752,7 @@ resumeGame: () => void;
   <label className="mb-3 block text-lg font-bold">
     Mode de jeu
   </label>
-
+</div>
   <div className="space-y-3">
     <button
       onClick={() => setGameMode("6cols")}
@@ -767,25 +793,36 @@ resumeGame: () => void;
   <button
     onClick={resumeGame}
     className="
-	mt-4
-      mb-1
-      w-full
-      rounded-xl
-      bg-emerald-600
-      px-4
-      py-3
-      font-black
-      hover:bg-emerald-500
-    "
+mt-4
+w-full
+rounded-xl
+bg-cyan-600
+px-4
+py-4
+text-lg
+font-black
+hover:bg-cyan-500
+"
   >
     Reprendre la partie
   </button>
 )}
         <button
           onClick={startGame}
-          className="mt-3 w-full rounded-xl bg-indigo-600 px-4 py-3 font-black hover:bg-indigo-500"
+          className="
+mt-3
+w-full
+rounded-xl
+bg-cyan-600
+px-4
+py-4
+text-lg
+font-black
+hover:bg-cyan-500
+transition-colors
+"
         >
-          Créer la partie
+          🎲 Commencer la partie
         </button>
       </div>
     </section>
@@ -980,7 +1017,9 @@ setEditingPlayerId: (value: string | null) => void;
 activeColumns: typeof columns;
 lastScoreAnimation: {
   playerId: string;
-  value: number;
+  columnId: string;
+  rowId: string;
+  value: number | "X";
 } | null;
 }) {
   const bottomRows = rows.slice(6);
@@ -1049,7 +1088,9 @@ const color =
   </div>
   {lastScoreAnimation?.playerId === player.id && (
   <div className={`pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black animate-score-pop ${color.text}`}>
-    +{lastScoreAnimation.value}
+    {lastScoreAnimation.value === "X"
+  ? "✕"
+  : `+${lastScoreAnimation.value}`}
   </div>
 )}
   <div className="h-5 mt-1">
@@ -1092,6 +1133,7 @@ const color =
                   columnId={column.id}
                   rowId={row.id}
                   rowIndex={rowIndex}
+				  lastScoreAnimation={lastScoreAnimation}
                   section="top"
                   value={getScore(player.id, column.id, row.id)}
                   playable={isCellPlayable(player.id, column.id, row.id)}
@@ -1147,6 +1189,7 @@ const color =
               isCellPlayable={isCellPlayable}
               onSelectCell={onSelectCell}
 			  activeColumns={activeColumns}
+			  lastScoreAnimation={lastScoreAnimation}
             />
           ))}
 
@@ -1179,6 +1222,7 @@ function FragmentRow({
   isCellPlayable,
   onSelectCell,
   activeColumns,
+  lastScoreAnimation,
 }: {
   row: { id: YamRow; label: string };
   rowIndex: number;
@@ -1193,6 +1237,12 @@ function FragmentRow({
     columnId: string,
     rowId: YamRow
   ) => boolean;
+  lastScoreAnimation: {
+  playerId: string;
+  columnId: string;
+  rowId: string;
+  value: number | "X";
+} | null;
   onSelectCell: (cell: SelectedCell) => void;
   activeColumns: typeof columns;
 }) {
@@ -1215,6 +1265,7 @@ function FragmentRow({
             rowId={row.id}
             rowIndex={rowIndex}
             section="bottom"
+			lastScoreAnimation={lastScoreAnimation}
             value={getScore(player.id, column.id, row.id)}
             playable={isCellPlayable(player.id, column.id, row.id)}
             onSelectCell={onSelectCell}
@@ -1247,6 +1298,7 @@ function ScoreCell({
   playable,
   onSelectCell,
   blockStart,
+  lastScoreAnimation,
 }: {
   playerId: string;
   columnId: string;
@@ -1257,10 +1309,19 @@ function ScoreCell({
   playable: boolean;
   onSelectCell: (cell: SelectedCell) => void;
   blockStart: boolean;
+  lastScoreAnimation: {
+    playerId: string;
+    columnId: string;
+    rowId: string;
+    value: number | "X";
+  } | null;
 }) {
   const colorClass =
     section === "top" ? getTopColor(rowIndex) : getBottomColor(rowIndex);
-
+const isLastPlayed =
+  lastScoreAnimation?.playerId === playerId &&
+  lastScoreAnimation?.columnId === columnId &&
+  lastScoreAnimation?.rowId === rowId;
   return (
     <td
       onClick={() => {
@@ -1268,8 +1329,11 @@ function ScoreCell({
         onSelectCell({ playerId, columnId, rowId });
       }}
       className={[
-        "h-6 w-10 border border-slate-950 text-sm font-black transition-all",
+        "h-6 w-10 border border-slate-950 text-sm font-black transition-all duration-200",
 		blockStart ? "border-l-4 border-l-black" : "",
+		isLastPlayed
+  ? "relative z-10 scale-110 ring-4 ring-yellow-300 shadow-lg shadow-yellow-300/60"
+  : "",
         colorClass,
         playable
           ? "cursor-pointer text-slate-950 hover:brightness-110"
@@ -1350,6 +1414,20 @@ function ScoreModal({
     selectedCell.rowId === "plus" || selectedCell.rowId === "minus";
 const [errorMessage, setErrorMessage] = useState("");
   const modalOptions: Array<number | "X"> = [...scoreOptions, "X"];
+  const currentColumn = columns.find(
+  (column) => column.id === selectedCell.columnId
+);
+
+const currentRow = rows.find(
+  (row) => row.id === selectedCell.rowId
+);
+
+const columnLabel =
+  currentColumn?.type === "down"
+    ? "Descente"
+    : currentColumn?.type === "free"
+    ? "Libre"
+    : "Montée";
 function validateManualScore() {
   const value = Number(scoreInput);
 
@@ -1370,7 +1448,19 @@ function validateManualScore() {
           isPlusMinus ? "w-[520px]" : "w-96",
         ].join(" ")}
       >
-        <h3 className="mb-4 text-xl font-black">Entrer un score</h3>
+        <div className="mb-5 text-center">
+  <div className="text-xs font-black uppercase tracking-wider text-slate-400">
+    {columnLabel}
+  </div>
+
+  <h3 className="mt-1 text-2xl font-black text-white">
+    {currentRow?.label}
+  </h3>
+
+  <div className="mt-1 text-sm font-bold text-slate-500">
+    Entrer un score
+  </div>
+</div>
 
         {modalOptions.length > 0 && (
           <div
