@@ -1216,7 +1216,12 @@ function ScoreModal({
         <h3 className="mb-4 text-xl font-black">Entrer un score</h3>
 
         {modalOptions.length > 0 && (
-          <div className="mb-4 grid grid-cols-6 gap-2">
+          <div
+  className={[
+    "mb-5 grid gap-3",
+    isPlusMinus ? "grid-cols-5" : "grid-cols-3",
+  ].join(" ")}
+>
             {modalOptions.map((option) => (
               <button
                 key={option}
@@ -1224,7 +1229,7 @@ function ScoreModal({
                   option === "X" ? saveScore("X") : saveScore(option)
                 }
                 className={[
-                  "rounded-lg py-2 font-bold transition-colors",
+                  "min-h-14 rounded-xl px-4 py-3 text-xl font-black transition-colors",
                   option === "X"
                     ? "bg-rose-700 text-white hover:bg-rose-600"
                     : "bg-slate-100 text-slate-950 hover:bg-cyan-100",
@@ -1261,21 +1266,21 @@ function ScoreModal({
             }}
             className="rounded-xl bg-indigo-600 py-3 font-bold hover:bg-indigo-500"
           >
-            Valider
+            ✓ Valider
           </button>
 
           <button
             onClick={clearScore}
             className="rounded-xl bg-slate-700 py-3 font-bold hover:bg-slate-600"
           >
-            Effacer
+            🗑️ Effacer
           </button>
 
           <button
             onClick={closeModal}
             className="rounded-xl bg-slate-800 py-3 font-bold hover:bg-slate-700"
           >
-            Annuler
+            ✘ Annuler
           </button>
         </div>
       </div>
