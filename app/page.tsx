@@ -61,6 +61,7 @@ const [editingName, setEditingName] = useState("");
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [scores, setScores] = useState<Scores>({});
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+  
   const [scoreInput, setScoreInput] = useState("");
   const [pendingCell, setPendingCell] = useState<SelectedCell | null>(null);
   const [fitToScreen, setFitToScreen] = useState(false);
@@ -475,7 +476,7 @@ resumeGame={resumeGame}
       ) : (
         <section className="relative flex h-full flex-col overflow-hidden">
   <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-    <div className="select-none text-[28rem] opacity-[0.09]">
+    <div className="select-none text-[70rem] opacity-[0.09]">
       🎲
     </div>
   </div>
@@ -794,7 +795,7 @@ function GameToolbar({
 }) {
   return (
     <div className="flex h-12 items-center justify-between border-b border-slate-800 bg-black px-3">
-      <div className="text-xs font-black uppercase text-cyan-300">
+      <div className="text-xs font-black uppercase text-white">
         {fitToScreen ? "Affichage adapté" : "Affichage normal"}
       </div>
 
@@ -861,16 +862,18 @@ function getPlayerColor(playerId: string) {
   : "w-full shrink-0",
       ].join(" ")}
     >
-      <h3 className="mb-3 text-sm font-black uppercase text-cyan-300">
+      <h3 className="mb-3 text-sm font-black uppercase text-white">
   {gameFinished ? "🏆 Partie terminée" : "Classement"}
 </h3>
 
       <div
-        className={[
-          "gap-2",
-          layout === "side" ? "grid" : "flex overflow-x-auto",
-        ].join(" ")}
-      >
+  className={[
+    "gap-2",
+    layout === "side"
+      ? "grid"
+      : "flex flex-wrap justify-center",
+  ].join(" ")}
+>
         {players.map((player) => {
   const color = getPlayerColor(player.id);
 
@@ -1106,7 +1109,7 @@ const color =
                 getBonus(player.id, column.id)
             )}
             labelClassName="bg-slate-700 text-white"
-            cellClassName="bg-slate-300 text-white"
+            cellClassName="bg-slate-200 text-rose-700"
 			activeColumns={activeColumns}
           />
 
@@ -1325,9 +1328,20 @@ function ScoreModal({
 }) {
   const isPlusMinus =
     selectedCell.rowId === "plus" || selectedCell.rowId === "minus";
-
+const [errorMessage, setErrorMessage] = useState("");
   const modalOptions: Array<number | "X"> = [...scoreOptions, "X"];
+function validateManualScore() {
+  const value = Number(scoreInput);
 
+  if (Number.isNaN(value)) return;
+
+  if (!isValidScoreForRow(selectedCell.rowId, value)) {
+    setErrorMessage("Score impossible pour cette case.");
+    return;
+  }
+
+  saveScore(value);
+}
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75">
       <div
@@ -1365,32 +1379,33 @@ function ScoreModal({
         )}
 
         <input
+		onKeyDown={(event) => {
+  if (event.key === "Enter") {
+    validateManualScore();
+  }
+}}
           type="number"
           value={scoreInput}
-          onChange={(event) => setScoreInput(event.target.value)}
+          onChange={(event) => {
+  setScoreInput(event.target.value);
+  setErrorMessage("");
+}}
           className="w-full rounded-xl border border-slate-700 bg-black p-3 text-center text-2xl"
           placeholder="Score manuel"
           autoFocus
         />
-
+{errorMessage && (
+  <div className="mt-3 rounded-xl border border-rose-700 bg-rose-700/10 px-3 py-2 text-center text-sm font-black text-rose-300">
+    {errorMessage}
+  </div>
+)}
         <div className="mt-4 grid gap-2">
           <button
-            onClick={() => {
-              const value = Number(scoreInput);
-
-              if (Number.isNaN(value)) return;
-
-              if (!isValidScoreForRow(selectedCell.rowId, value)) {
-                alert("Score impossible pour cette case.");
-                return;
-              }
-
-              saveScore(value);
-            }}
-            className="rounded-xl bg-indigo-600 py-3 font-bold hover:bg-indigo-500"
-          >
-            ✓ Valider
-          </button>
+  onClick={validateManualScore}
+  className="rounded-xl bg-indigo-600 py-3 font-bold hover:bg-indigo-500"
+>
+  ✓ Valider
+</button>
 
           <button
             onClick={clearScore}
