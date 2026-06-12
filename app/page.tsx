@@ -62,6 +62,7 @@ const [editingName, setEditingName] = useState("");
   const [scores, setScores] = useState<Scores>({});
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const [scoreInput, setScoreInput] = useState("");
+  const [pendingCell, setPendingCell] = useState<SelectedCell | null>(null);
   const [fitToScreen, setFitToScreen] = useState(false);
   const [fitScale, setFitScale] = useState(1);
   const [fitOffsetX, setFitOffsetX] = useState(0);
@@ -132,7 +133,20 @@ useEffect(() => {
     })
   );
 }, [players, scores, gameMode]);
+function handleSelectCell(cell: SelectedCell) {
+  const currentValue = getScore(cell.playerId, cell.columnId, cell.rowId);
 
+  if (
+    currentValue === null &&
+    cell.playerId !== currentPlayerId &&
+    !gameFinished
+  ) {
+    setPendingCell(cell);
+    return;
+  }
+
+  setSelectedCell(cell);
+}
 function newGameFromVictory() {
   localStorage.removeItem(STORAGE_KEY);
 
@@ -506,7 +520,7 @@ resumeGame={resumeGame}
   getGrandTotal={getGrandTotal}
   getPlayerTotal={getPlayerTotal}
   isCellPlayable={isCellPlayable}
-  onSelectCell={setSelectedCell}
+  onSelectCell={handleSelectCell}
   startEditingPlayer={startEditingPlayer}
   editingPlayerId={editingPlayerId}
 editingName={editingName}
@@ -514,6 +528,8 @@ setEditingName={setEditingName}
 savePlayerName={savePlayerName}
 setEditingPlayerId={setEditingPlayerId}
 activeColumns={activeColumns}
+currentPlayerId={currentPlayerId}
+gameFinished={gameFinished}
 />
                 ))}
               </div>
@@ -554,7 +570,55 @@ activeColumns={activeColumns}
     onConfirm={confirmQuitGame}
   />
 )}
+{pendingCell && (
+  <WrongPlayerModal
+    onCancel={() => setPendingCell(null)}
+    onConfirm={() => {
+      setSelectedCell(pendingCell);
+      setPendingCell(null);
+    }}
+  />
+)}
     </main>
+  );
+}
+function WrongPlayerModal({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+      <div className="w-full max-w-md rounded-3xl border border-amber-500 bg-black p-6 text-center shadow-2xl shadow-amber-500/20">
+        <div className="text-4xl">⚠️</div>
+
+        <h2 className="mt-3 text-2xl font-black text-white">
+          Ce n'est pas à ce joueur de jouer
+        </h2>
+
+        <p className="mt-3 text-sm font-bold text-slate-400">
+          Tu veux quand même remplir cette case ?
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            onClick={onCancel}
+            className="rounded-xl bg-slate-800 px-4 py-3 font-black hover:bg-slate-700"
+          >
+            Annuler
+          </button>
+
+          <button
+            onClick={onConfirm}
+            className="rounded-xl bg-amber-500 px-4 py-3 font-black text-black hover:bg-amber-400"
+          >
+            Continuer
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 function QuitModal({
@@ -837,7 +901,7 @@ function getPlayerColor(playerId: string) {
       </div>
 	  {!gameFinished && player.id === currentPlayerId && (
   <div className="mt-1 text-xs font-black text-emerald-400">
-    ▶ À jouer
+    ▶ Ton tour
   </div>
 )}
 <div className="mt-2 text-sm text-slate-300">
@@ -876,6 +940,8 @@ setEditingName,
 savePlayerName,
 setEditingPlayerId,
 activeColumns,
+currentPlayerId,
+gameFinished,
 }: {
   player: Player;
   getScore: (playerId: string, columnId: string, rowId: YamRow) => ScoreValue;
@@ -884,6 +950,8 @@ activeColumns,
   getBottomTotal: (playerId: string, columnId: string) => number;
   getGrandTotal: (playerId: string, columnId: string) => number;
   getPlayerTotal: (playerId: string) => number;
+  currentPlayerId: string | null;
+gameFinished: boolean;
   isCellPlayable: (playerId: string, columnId: string, rowId: YamRow) => boolean;
   onSelectCell: (cell: SelectedCell) => void;
   startEditingPlayer: (
@@ -903,6 +971,8 @@ const playerIndex =
 
 const color =
   PLAYER_COLORS[playerIndex % PLAYER_COLORS.length];
+  const isCurrentPlayer =
+  player.id === currentPlayerId;
   return (
     <div
   className={`shrink-0 rounded-xl border-2 ${color.border} bg-black p-2`}
@@ -959,6 +1029,15 @@ const color =
   <div className={`text-3xl font-black ${color.text}`}>
     {getPlayerTotal(player.id)}
   </div>
+  <div className="h-5 mt-1">
+  {isCurrentPlayer && !gameFinished && (
+    <div
+      className={`text-xs font-black uppercase tracking-wider animate-pulse ${color.text}`}
+    >
+      ▶ Ton tour
+    </div>
+  )}
+</div>
 </div>
 
       <table className="border-collapse text-center text-sm">
