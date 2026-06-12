@@ -233,16 +233,13 @@ function countFigure(playerId: string, rowId: YamRow) {
   setShowQuitModal(true);
 }
 function confirmQuitGame() {
-  localStorage.removeItem(STORAGE_KEY);
-
   setPlayers([]);
-  setScores({});
   setSelectedCell(null);
   setScoreInput("");
   setFitToScreen(false);
   setFitScale(1);
   setShowQuitModal(false);
-  setHasSavedGame(false);
+  setHasSavedGame(true);
 }
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -658,7 +655,7 @@ function QuitModal({
         </h2>
 
         <p className="mt-3 text-sm font-bold text-slate-400">
-          Les scores actuels seront effacés.
+          La partie sera sauvegardée et tu reviendras au menu principal.
         </p>
 
         <div className="mt-6 grid grid-cols-2 gap-3">
