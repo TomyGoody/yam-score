@@ -56,6 +56,7 @@ export default function Home() {
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
 const [editingName, setEditingName] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
+  const [showQuitModal, setShowQuitModal] = useState(false);
   const [gameMode, setGameMode] = useState<"6cols" | "3cols">("6cols");
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [scores, setScores] = useState<Scores>({});
@@ -197,16 +198,20 @@ function countFigure(playerId: string, rowId: YamRow) {
 }
 
   function quitGame() {
-    if (!window.confirm("Quitter la partie ? Les scores seront effacés.")) return;
-localStorage.removeItem(STORAGE_KEY);
-    setPlayers([]);
-    setScores({});
-    setSelectedCell(null);
-    setScoreInput("");
-    setFitToScreen(false);
-    setFitScale(1);
-  }
+  setShowQuitModal(true);
+}
+function confirmQuitGame() {
+  localStorage.removeItem(STORAGE_KEY);
 
+  setPlayers([]);
+  setScores({});
+  setSelectedCell(null);
+  setScoreInput("");
+  setFitToScreen(false);
+  setFitScale(1);
+  setShowQuitModal(false);
+  setHasSavedGame(false);
+}
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen();
@@ -526,10 +531,54 @@ activeColumns={activeColumns}
     onNewGame={newGameFromVictory}
   />
 )}
+{showQuitModal && (
+  <QuitModal
+    onCancel={() => setShowQuitModal(false)}
+    onConfirm={confirmQuitGame}
+  />
+)}
     </main>
   );
 }
+function QuitModal({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+      <div className="w-full max-w-md rounded-3xl border border-rose-700 bg-black p-6 text-center shadow-2xl shadow-rose-900/30">
+        <div className="text-4xl">⚠️</div>
 
+        <h2 className="mt-3 text-2xl font-black text-white">
+          Quitter la partie ?
+        </h2>
+
+        <p className="mt-3 text-sm font-bold text-slate-400">
+          Les scores actuels seront effacés.
+        </p>
+
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <button
+            onClick={onCancel}
+            className="rounded-xl bg-slate-800 px-4 py-3 font-black hover:bg-slate-700"
+          >
+            Continuer
+          </button>
+
+          <button
+            onClick={onConfirm}
+            className="rounded-xl bg-rose-700 px-4 py-3 font-black text-white hover:bg-rose-600"
+          >
+            Quitter
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function StartScreen({
   playerCount,
   setPlayerCount,
@@ -561,17 +610,26 @@ resumeGame: () => void;
           Nombre de joueurs
         </label>
 
-        <select
-          value={playerCount}
-          onChange={(event) => setPlayerCount(Number(event.target.value))}
-          className="mt-2 w-full rounded-xl border border-slate-700 bg-black px-4 py-3 text-white"
-        >
-          {[1, 2, 3, 4, 5, 6].map((count) => (
-            <option key={count} value={count}>
-              {count} joueur{count > 1 ? "s" : ""}
-            </option>
-          ))}
-        </select>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+  {[1, 2, 3, 4, 5, 6].map((count) => (
+    <button
+      key={count}
+      type="button"
+      onClick={() => setPlayerCount(count)}
+      className={[
+        "rounded-xl border px-4 py-3 font-black transition",
+        playerCount === count
+          ? "border-cyan-500 bg-cyan-500/10 text-cyan-300"
+          : "border-slate-700 bg-black text-white hover:border-slate-500",
+      ].join(" ")}
+    >
+      {count}
+    </button>
+  ))}
+</div>
+<p className="mt-2 text-sm text-slate-400">
+  {playerCount} joueur{playerCount > 1 ? "s" : ""} sélectionné
+</p>
 <div className="mt-6">
   <label className="mb-3 block text-lg font-bold">
     Mode de jeu
