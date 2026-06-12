@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Yam Score",
-  description: "Compteur de score moderne pour le Yam",
+  description: "Compteur de score moderne pour le Yam.",
 };
 
 export default function RootLayout({
