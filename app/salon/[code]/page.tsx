@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 import GameScreen from "@/app/components/GameScreen";
-
+import QRCode from "react-qr-code";
 import PlayerSheet from "@/app/components/PlayerSheet";
 import Leaderboard from "@/app/components/Leaderboard";
 import { columns, rows, YamRow } from "@/app/lib/yamRules";
@@ -48,7 +48,10 @@ const sheetRef = useRef<HTMLDivElement | null>(null);
   const router = useRouter();
 
   const code = String(params.code).toUpperCase();
-
+const joinUrl =
+  typeof window !== "undefined"
+    ? `${window.location.origin}/join?code=${code}`
+    : `/join?code=${code}`;
   const [gameId, setGameId] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerCount, setPlayerCount] = useState(0);
@@ -593,50 +596,61 @@ if (status === "playing" || status === "finished") {
   </main>
 );
 }
-  return (
-    <main className="min-h-screen bg-black text-white p-6">
-      <div className="mx-auto max-w-lg text-center">
-        
-        <h1 className="text-3xl font-black text-cyan-300">
-          Salon {code}
-        </h1>
+ return (
+  <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
+    <div className="w-full max-w-2xl rounded-3xl border border-cyan-500 bg-black p-8 text-center shadow-2xl shadow-cyan-500/20">
+      <h1 className="text-4xl font-black text-cyan-300">
+        Salon {code}
+      </h1>
 
-        <p className="mt-2 text-slate-400">
-          {players.length} / {playerCount} joueurs
-        </p>
+      <p className="mt-2 text-sm font-bold text-slate-400">
+        Demande aux joueurs de scanner le QR code ou d’aller sur :
+      </p>
 
-        {/* PLAYERS */}
-        <div className="mt-6 space-y-2">
-          {players.map((p) => (
+      <div className="mt-3 rounded-xl border border-slate-800 bg-slate-950 p-3 font-black text-cyan-300">
+        {joinUrl}
+      </div>
+
+      <div className="mt-6 flex justify-center">
+        <div className="rounded-2xl bg-white p-4">
+          <QRCode value={joinUrl} size={180} />
+        </div>
+      </div>
+
+      <div className="mt-6 text-2xl font-black">
+        {players.length} / {playerCount} joueurs connectés
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        {players.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-950 p-4 text-slate-400">
+            En attente des joueurs...
+          </div>
+        ) : (
+          players.map((p) => (
             <div
               key={p.id}
-              className="rounded-xl border border-cyan-500 bg-cyan-500/10 p-3 font-black"
+              className="rounded-xl border border-cyan-500 bg-cyan-500/10 p-3 font-black text-cyan-300"
             >
               #{p.player_order} {p.name}
             </div>
-          ))}
-        </div>
-
-        {/* START */}
-        <button
-          onClick={startGame}
-          disabled={players.length !== playerCount}
-          className={[
-            "mt-6 w-full rounded-xl p-4 font-black transition",
-            players.length === playerCount
-              ? "bg-cyan-600 hover:bg-cyan-500"
-              : "bg-slate-800 text-slate-500 cursor-not-allowed",
-          ].join(" ")}
-        >
-          Démarrer la partie
-        </button>
-
-        {message && (
-          <p className="mt-4 text-amber-300 font-bold">
-            {message}
-          </p>
+          ))
         )}
       </div>
-    </main>
-  );
+
+      <button
+        onClick={startGame}
+        disabled={players.length !== playerCount}
+        className={[
+          "mt-6 w-full rounded-xl p-4 text-lg font-black transition",
+          players.length === playerCount
+            ? "bg-cyan-600 hover:bg-cyan-500"
+            : "cursor-not-allowed bg-slate-800 text-slate-500",
+        ].join(" ")}
+      >
+        Démarrer la partie
+      </button>
+    </div>
+  </main>
+);
 }

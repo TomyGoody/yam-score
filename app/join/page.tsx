@@ -1,12 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useRouter } from "next/navigation";
 import { columns, rows, YamRow, getPossibleValues } from "../lib/yamRules";
-
+import { useSearchParams } from "next/navigation";
 const JOIN_STORAGE_KEY = "yam-score-join-session";
+
 export default function JoinPage() {
+  return (
+    <Suspense fallback={null}>
+      <JoinPageContent />
+    </Suspense>
+  );
+}
+function JoinPageContent() {
+	const searchParams = useSearchParams();
 	const router = useRouter();
   const [code, setCode] = useState("");
   const [playerName, setPlayerName] = useState("");
@@ -112,6 +121,43 @@ localStorage.setItem(
 
 router.push(`/salon/${code.trim().toUpperCase()}/player/${selectedOrder}`);
 }
+useEffect(() => {
+  const codeFromUrl = searchParams.get("code");
+
+  if (!codeFromUrl) return;
+
+  const cleanCode = codeFromUrl.trim().toUpperCase();
+
+  setCode(cleanCode);
+
+  async function autoFindSalon() {
+    const { data, error } = await supabase
+      .from("yam_games")
+      .select("id, code, player_count, status, mode")
+      .eq("code", cleanCode)
+      .single();
+
+    if (error || !data) {
+      setMessage("Salon introuvable.");
+      return;
+    }
+
+    setGameId(data.id);
+    setGameStatus(data.status);
+    setPlayerCount(data.player_count);
+    setGameMode(data.mode);
+
+    const { data: playersData } = await supabase
+      .from("yam_players")
+      .select("player_order")
+      .eq("game_id", data.id);
+
+    setTakenOrders(playersData?.map((player) => player.player_order) ?? []);
+    setMessage("");
+  }
+
+  autoFindSalon();
+}, [searchParams]);
 useEffect(() => {
   const saved = localStorage.getItem(JOIN_STORAGE_KEY);
   if (!saved) return;

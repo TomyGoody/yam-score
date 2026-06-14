@@ -1074,21 +1074,38 @@ setPartyMode: (mode: "local" | "salon") => void;
   </button>
 )}
 
-  <div>
-    <button
-      onClick={startGame}
-      className="w-full rounded-xl bg-cyan-600 px-4 py-4 text-lg font-black hover:bg-cyan-500 transition-colors"
-    >
-      Nouvelle Partie
-    </button>
+  
+  {partyMode === "salon" ? (
+  <>
+    <div className="grid grid-cols-2 gap-3">
+      <button
+        onClick={startGame}
+        className="w-full rounded-xl bg-cyan-600 px-4 py-4 text-lg font-black hover:bg-cyan-500 transition-colors"
+      >
+        Nouvelle Partie
+      </button>
 
-    
-  </div>
-  {partyMode === "salon" && (
-  <p className="mt-3 text-center text-xs font-bold text-slate-500">
-    Les parties salon sont sauvegardées en ligne. Pour reprendre une partie,
-    il suffit de rouvrir le lien du salon.
-  </p>
+      <button
+        type="button"
+        onClick={() => router.push("/join")}
+        className="w-full rounded-xl border border-cyan-500 bg-transparent px-4 py-4 text-lg font-black text-cyan-300 transition hover:bg-cyan-500/10"
+      >
+        Rejoindre
+      </button>
+    </div>
+
+    <p className="mt-3 text-center text-xs font-bold text-slate-500">
+      Les parties salon sont sauvegardées en ligne. Pour reprendre une partie,
+      il suffit de rouvrir le lien du salon.
+    </p>
+  </>
+) : (
+  <button
+    onClick={startGame}
+    className="w-full rounded-xl bg-cyan-600 px-4 py-4 text-lg font-black hover:bg-cyan-500 transition-colors"
+  >
+    Nouvelle Partie
+  </button>
 )}
 </div>
       </div>
