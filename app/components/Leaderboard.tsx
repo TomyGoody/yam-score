@@ -38,11 +38,13 @@ export default function Leaderboard({
   gameFinished: boolean;
 }) {
   if (players.length === 0) return null;
-function getPlayerColor(player: Player) {
-  const index =
-  (player.playerOrder ?? player.player_order ?? 1) - 1;
+function getPlayerColor(player: Player, index: number) {
+  const order = player.playerOrder ?? player.player_order;
 
-  return PLAYER_COLORS[index % PLAYER_COLORS.length];
+  const colorIndex =
+    typeof order === "number" ? order - 1 : index;
+
+  return PLAYER_COLORS[colorIndex % PLAYER_COLORS.length];
 }
   return (
     <aside
@@ -65,8 +67,8 @@ function getPlayerColor(player: Player) {
       : "flex flex-wrap justify-center",
   ].join(" ")}
 >
-        {players.map((player) => {
-  const color = getPlayerColor(player);
+        {players.map((player, index) => {
+  const color = getPlayerColor(player, index);
 
   return (
     <div
