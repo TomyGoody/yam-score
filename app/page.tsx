@@ -2,13 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { columns, rows, YamRow } from "./lib/yamRules";
-import { Pencil } from "lucide-react";
 import Image from "next/image";
+import { supabase } from "./lib/supabase";
 type ScoreValue = number | "X" | null;
+import { useRouter } from "next/navigation";
+import GameScreen from "./components/GameScreen";
+import Leaderboard from "./components/Leaderboard";
+import PlayerSheet from "./components/PlayerSheet";
 
 type Player = {
   id: string;
   name: string;
+  playerOrder?: number;
 };
 
 type Scores = Record<string, Record<string, Record<YamRow, ScoreValue>>>;
@@ -52,10 +57,19 @@ const PLAYER_COLORS = [
   },
 ];
 export default function Home() {
+	const router = useRouter();
   const [playerCount, setPlayerCount] = useState(2);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
 const [editingName, setEditingName] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
+  const [showNewGameWarning, setShowNewGameWarning] = useState(false);
+  
+  const [savedGameInfo, setSavedGameInfo] = useState<{
+  playerCount: number;
+  mode: string;
+  remainingTurns: number;
+} | null>(null);
+const [partyMode, setPartyMode] = useState<"local" | "salon">("local");
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [gameMode, setGameMode] = useState<"6cols" | "3cols">("6cols");
   const [showVictoryModal, setShowVictoryModal] = useState(false);
@@ -67,6 +81,12 @@ const [editingName, setEditingName] = useState("");
   rowId: string;
   value: number | "X";
 } | null>(null);
+const [salonCode, setSalonCode] = useState<string | null>(null);
+const [isCreatingSalon, setIsCreatingSalon] = useState(false);
+const [salonGameId, setSalonGameId] = useState<string | null>(null);
+const [salonPlayers, setSalonPlayers] = useState<
+  { id: string; name: string; player_order: number }[]
+>([]);
   const [scoreInput, setScoreInput] = useState("");
   const [pendingCell, setPendingCell] = useState<SelectedCell | null>(null);
   const [fitToScreen, setFitToScreen] = useState(false);
@@ -83,12 +103,39 @@ const [hasSavedGame, setHasSavedGame] = useState(false);
     ? columns
     : [columns[0], columns[2], columns[4]];
 useEffect(() => {
+  updateSavedGameInfo();
+}, []);
+
+function updateSavedGameInfo() {
   const saved = localStorage.getItem(STORAGE_KEY);
 
-  if (saved) {
-    setHasSavedGame(true);
+  if (!saved) {
+    setHasSavedGame(false);
+    setSavedGameInfo(null);
+    return;
   }
-}, []);
+
+  const data = JSON.parse(saved);
+  const savedPlayerCount = data.players?.length ?? 0;
+  const columnCount = data.gameMode === "6cols" ? 6 : 3;
+  const totalCells = savedPlayerCount * columnCount * 13;
+
+  const filledCells = Object.values(data.scores ?? {})
+    .flatMap((player: any) => Object.values(player))
+    .flatMap((column: any) => Object.values(column))
+    .filter((value) => value !== null).length;
+
+  const remainingTurns = Math.ceil(
+    (totalCells - filledCells) / savedPlayerCount
+  );
+
+  setHasSavedGame(true);
+  setSavedGameInfo({
+    playerCount: savedPlayerCount,
+    mode: data.gameMode === "6cols" ? "6 colonnes" : "3 colonnes",
+    remainingTurns,
+  });
+}
  useEffect(() => {
   function updateLayout() {
     const viewport = viewportRef.current;
@@ -153,6 +200,162 @@ function handleSelectCell(cell: SelectedCell) {
 
   setSelectedCell(cell);
 }
+function generateSalonCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+}
+
+async function createSalon() {
+  setIsCreatingSalon(true);
+
+  const code = generateSalonCode();
+
+  const { data, error } = await supabase
+  .from("yam_games")
+  .insert({
+    code,
+    mode: gameMode,
+    player_count: playerCount,
+    status: "waiting",
+	current_player_order: 1,
+  })
+  .select("id")
+  .single();
+
+  if (error) {
+  console.error("SUPABASE ERROR", {
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    code: error.code,
+  });
+
+  alert(error.message);
+
+  setIsCreatingSalon(false);
+  return;
+}
+
+setIsCreatingSalon(false);
+router.push(`/salon/${code}`);
+}
+async function loadSalonPlayers() {
+  if (!salonGameId) return;
+
+  const { data, error } = await supabase
+    .from("yam_players")
+    .select("id, name, player_order")
+    .eq("game_id", salonGameId)
+    .order("player_order", { ascending: true });
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  setSalonPlayers(data ?? []);
+}
+async function startSalonGame() {
+  if (!salonGameId) return;
+
+  const { data: playersData, error: playersError } = await supabase
+    .from("yam_players")
+    .select("id, name, player_order")
+    .eq("game_id", salonGameId)
+    .order("player_order", { ascending: true });
+
+  if (playersError) {
+    console.error("Erreur récupération joueurs", playersError);
+    return;
+  }
+
+  const salonPlayersAsLocalPlayers = (playersData ?? []).map((player) => ({
+  id: player.id,
+  name: player.name,
+  playerOrder: player.player_order,
+}));
+
+  setPlayers(salonPlayersAsLocalPlayers);
+  setScores({});
+  setSalonCode(null);
+  setFitToScreen(false);
+  setFitScale(1);
+
+  const { error } = await supabase
+    .from("yam_games")
+    .update({
+      status: "playing",
+    })
+    .eq("id", salonGameId);
+
+  if (error) {
+    console.error("Erreur démarrage salon", error);
+  }
+}
+useEffect(() => {
+  if (!salonGameId) return;
+
+  loadSalonPlayers();
+
+  const channel = supabase
+    .channel(`yam_players_${salonGameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "yam_players",
+        filter: `game_id=eq.${salonGameId}`,
+      },
+      () => {
+        loadSalonPlayers();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [salonGameId]);
+useEffect(() => {
+  if (!salonGameId) return;
+
+  const channel = supabase
+    .channel(`yam_scores_${salonGameId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "yam_scores",
+        filter: `game_id=eq.${salonGameId}`,
+      },
+      (payload) => {
+        const newScore = payload.new as {
+          player_id: string;
+          column_id: string;
+          row_id: YamRow;
+          value: string;
+        };
+
+        setScores((current) => ({
+          ...current,
+          [newScore.player_id]: {
+            ...current[newScore.player_id],
+            [newScore.column_id]: {
+              ...current[newScore.player_id]?.[newScore.column_id],
+              [newScore.row_id]:
+                newScore.value === "X" ? "X" : Number(newScore.value),
+            },
+          },
+        }));
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [salonGameId]);
 function newGameFromVictory() {
   localStorage.removeItem(STORAGE_KEY);
 
@@ -228,6 +431,19 @@ function countFigure(playerId: string, rowId: YamRow) {
   setFitToScreen(false);
   setFitScale(1);
 }
+function handleStartGame() {
+  if (partyMode === "salon") {
+    createSalon();
+    return;
+  }
+
+  if (hasSavedGame) {
+    setShowNewGameWarning(true);
+    return;
+  }
+
+  startGame();
+}
 
   function quitGame() {
   setShowQuitModal(true);
@@ -240,6 +456,7 @@ function confirmQuitGame() {
   setFitScale(1);
   setShowQuitModal(false);
   setHasSavedGame(true);
+  setTimeout(updateSavedGameInfo, 0);
 }
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
@@ -474,93 +691,60 @@ useEffect(() => {
 }, [gameFinished]);
   return (
     <main className="h-screen overflow-hidden bg-black text-white">
+	
       {players.length === 0 ? (
         <StartScreen
   playerCount={playerCount}
   setPlayerCount={setPlayerCount}
   gameMode={gameMode}
   setGameMode={setGameMode}
-  startGame={startGame}
+  startGame={handleStartGame}
   hasSavedGame={hasSavedGame}
 resumeGame={resumeGame}
+partyMode={partyMode}
+setPartyMode={setPartyMode}
 />
       ) : (
-        <section className="relative flex h-full flex-col overflow-hidden">
-  <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
-  <Image
-    src="/favicon.png"
-    alt=""
-    width={1000}
-    height={1000}
-    className="select-none rotate-[-12deg]"
-  />
-</div>
-          <GameToolbar
-            fitToScreen={fitToScreen}
-            setFitToScreen={setFitToScreen}
-            toggleFullscreen={toggleFullscreen}
-            quitGame={quitGame}
-          />
-
-          <div
-  className={[
-    "relative z-10 flex flex-1 gap-3 p-3",
-    useSideLeaderboard ? "flex-row" : "flex-col",
-  ].join(" ")}
->
-  <div
-    ref={viewportRef}
-    className={[
-      "flex-1",
-      fitToScreen
-        ? "overflow-hidden"
-        : "overflow-x-auto overflow-y-hidden",
-    ].join(" ")}
-  >
-    <div
-  ref={sheetRef}
-  style={{
-    transform: `translateX(${fitOffsetX}px) scale(${fitScale})`,
-    transformOrigin: "top left",
+        <GameScreen
+  fitToScreen={fitToScreen}
+  setFitToScreen={setFitToScreen}
+  toggleFullscreen={toggleFullscreen}
+  quitGame={quitGame}
+  useSideLeaderboard={useSideLeaderboard}
+  viewportRef={viewportRef}
+  sheetRef={sheetRef}
+  fitOffsetX={fitOffsetX}
+  fitScale={fitScale}
+  players={players}
+  PlayerSheetComponent={PlayerSheet}
+  playerSheetProps={{
+    getScore,
+    getTopTotal,
+    getBonus,
+    getBottomTotal,
+    getGrandTotal,
+    getPlayerTotal,
+    isCellPlayable,
+    onSelectCell: handleSelectCell,
+    startEditingPlayer,
+    editingPlayerId,
+    editingName,
+    setEditingName,
+    savePlayerName,
+    setEditingPlayerId,
+    activeColumns,
+    currentPlayerId,
+    gameFinished,
+    lastScoreAnimation,
   }}
-  className="flex w-max items-start gap-3"
->
-                {players.map((player) => (
-                  <PlayerSheet
-  key={player.id}
-  player={player}
-  getScore={getScore}
-  getTopTotal={getTopTotal}
-  getBonus={getBonus}
-  getBottomTotal={getBottomTotal}
-  getGrandTotal={getGrandTotal}
-  getPlayerTotal={getPlayerTotal}
-  isCellPlayable={isCellPlayable}
-  onSelectCell={handleSelectCell}
-  startEditingPlayer={startEditingPlayer}
-  editingPlayerId={editingPlayerId}
-editingName={editingName}
-setEditingName={setEditingName}
-savePlayerName={savePlayerName}
-setEditingPlayerId={setEditingPlayerId}
-activeColumns={activeColumns}
-currentPlayerId={currentPlayerId}
-gameFinished={gameFinished}
-lastScoreAnimation={lastScoreAnimation}
-/>
-                ))}
-              </div>
-            </div>
-
-            <Leaderboard
-  players={getLeaderboard()}
-  layout={useSideLeaderboard ? "side" : "bottom"}
-  currentPlayerId={currentPlayerId}
-  gameFinished={gameFinished}
-/>
-          </div>
-        </section>
-      )}
+  LeaderboardComponent={Leaderboard}
+  leaderboardProps={{
+    players: getLeaderboard(),
+    currentPlayerId,
+    gameFinished,
+  }}
+  playerColors={PLAYER_COLORS}
+/>      )}
 
       {selectedCell && (
         <ScoreModal
@@ -595,6 +779,58 @@ lastScoreAnimation={lastScoreAnimation}
       setPendingCell(null);
     }}
   />
+)}
+{showNewGameWarning && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-amber-500 bg-black p-6 text-center shadow-2xl shadow-amber-500/20">
+      <div className="text-4xl">⚠️</div>
+
+      <h2 className="mt-3 text-2xl font-black text-white">
+        Partie sauvegardée détectée
+      </h2>
+
+      <div className="mt-3 space-y-2 text-sm font-bold text-slate-400">
+  <div>
+    👥 {savedGameInfo?.playerCount} joueur{savedGameInfo?.playerCount! > 1 ? "s" : ""}
+  </div>
+
+  <div>
+    🎲 {savedGameInfo?.mode}
+  </div>
+
+  <div>
+    ⏳ {savedGameInfo?.remainingTurns} tour{savedGameInfo?.remainingTurns! > 1 ? "s" : ""} restant{savedGameInfo?.remainingTurns! > 1 ? "s" : ""}
+  </div>
+
+  <div className="pt-2 text-amber-300">
+    Commencer une nouvelle partie écrasera cette sauvegarde.
+  </div>
+</div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3">
+        <button
+          onClick={() => setShowNewGameWarning(false)}
+          className="rounded-xl bg-slate-800 px-4 py-3 font-black hover:bg-slate-700"
+        >
+          Annuler
+        </button>
+
+        <button
+          onClick={() => {
+            localStorage.removeItem(STORAGE_KEY);
+            setHasSavedGame(false);
+            setShowNewGameWarning(false);
+            startGame();
+			setSavedGameInfo(null);
+          }}
+          className="rounded-xl bg-amber-500 px-4 py-3 font-black text-black hover:bg-amber-400"
+        >
+          Nouvelle partie
+        </button>
+		
+      </div>
+    </div>
+  </div>
 )}
     </main>
   );
@@ -685,6 +921,8 @@ function StartScreen({
   startGame,
   hasSavedGame,
   resumeGame,
+  partyMode,
+setPartyMode,
 }: {
   playerCount: number;
   setPlayerCount: (count: number) => void;
@@ -693,7 +931,10 @@ setGameMode: (mode: "6cols" | "3cols") => void;
   startGame: () => void;
   hasSavedGame: boolean;
 resumeGame: () => void;
+partyMode: "local" | "salon";
+setPartyMode: (mode: "local" | "salon") => void;
 }) {
+	const router = useRouter();
   return (
     <section className="relative flex h-full items-center justify-center px-4 overflow-hidden">
 	<div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
@@ -705,9 +946,9 @@ resumeGame: () => void;
     className="select-none rotate-[-12deg]"
   />
 </div>
-      <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-black p-8 shadow-2xl">
+      <div className="w-full max-w-lg rounded-3xl border border-slate-800 bg-black p-4 shadow-2xl">
 	  
-        <div className="mb-8 text-center">
+        <div className="mb-3 text-center">
 		
           <h1 className="text-6xl font-black tracking-tight">
   Yam Score
@@ -719,6 +960,45 @@ resumeGame: () => void;
             Une feuille de score simple pour vos parties de Yam.
           </p>
         </div>
+		<label className="block text-sm font-bold text-slate-300">
+  Mode de partie
+</label>
+
+<div className="mt-2 grid grid-cols-2 gap-2">
+  <button
+    type="button"
+    onClick={() => setPartyMode("local")}
+    className={[
+      "rounded-xl border px-4 py-3 text-left font-black transition",
+      partyMode === "local"
+        ? "border-cyan-500 bg-cyan-500/10 text-cyan-300"
+        : "border-slate-700 bg-black text-white hover:border-slate-500",
+    ].join(" ")}
+  >
+    <div>Local</div>
+    <div className="mt-1 text-xs font-bold text-slate-400">
+      Une personne note tout
+    </div>
+  </button>
+
+  <button
+    type="button"
+    onClick={() => setPartyMode("salon")}
+    className={[
+      "rounded-xl border px-4 py-3 text-left font-black transition",
+      partyMode === "salon"
+        ? "border-cyan-500 bg-cyan-500/10 text-cyan-300"
+        : "border-slate-700 bg-black text-white hover:border-slate-500",
+    ].join(" ")}
+  >
+    <div>Salon</div>
+    <div className="mt-1 text-xs font-bold text-slate-400">
+      Chacun note sur son téléphone
+    </div>
+  </button>
+</div>
+
+<div className="my-5 h-px bg-slate-800" />
 <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-950/50 p-4">
         <label className="block text-sm font-bold text-slate-300">
           Nombre de joueurs
@@ -742,9 +1022,7 @@ resumeGame: () => void;
   ))}
   
 </div>
-<p className="mt-2 text-sm text-slate-400">
-  {playerCount} joueur{playerCount > 1 ? "s" : ""} sélectionné
-</p>
+
 <div className="mt-6">
   <label className="mb-3 block text-lg font-bold">
     Mode de jeu
@@ -786,41 +1064,33 @@ resumeGame: () => void;
     </button>
   </div>
 </div>
-{hasSavedGame && (
+<div className="mt-4 grid gap-3">
+  {hasSavedGame && partyMode === "local" && (
   <button
     onClick={resumeGame}
-    className="
-mt-4
-w-full
-rounded-xl
-bg-cyan-600
-px-4
-py-4
-text-lg
-font-black
-hover:bg-cyan-500
-"
+    className="w-full rounded-xl bg-cyan-600 px-4 py-4 text-lg font-black hover:bg-cyan-500"
   >
-    Reprendre la partie
+    Reprendre la partie locale
   </button>
 )}
-        <button
-          onClick={startGame}
-          className="
-mt-3
-w-full
-rounded-xl
-bg-cyan-600
-px-4
-py-4
-text-lg
-font-black
-hover:bg-cyan-500
-transition-colors
-"
-        >
-          🎲 Commencer la partie
-        </button>
+
+  <div>
+    <button
+      onClick={startGame}
+      className="w-full rounded-xl bg-cyan-600 px-4 py-4 text-lg font-black hover:bg-cyan-500 transition-colors"
+    >
+      Nouvelle Partie
+    </button>
+
+    
+  </div>
+  {partyMode === "salon" && (
+  <p className="mt-3 text-center text-xs font-bold text-slate-500">
+    Les parties salon sont sauvegardées en ligne. Pour reprendre une partie,
+    il suffit de rouvrir le lien du salon.
+  </p>
+)}
+</div>
       </div>
     </section>
   );
@@ -869,524 +1139,8 @@ function GameToolbar({
   );
 }
 
-function Leaderboard({
-  players,
-  layout,
-  currentPlayerId,
-  gameFinished,
-}: {
-  players: Array<
-    Player & {
-      total: number;
-      rank: number;
-      gap: number;
-      remainingMoves: number;
-      straights: number;
-      fourOfAKinds: number;
-      yams: number;
-    }
-  >;
-  layout: "side" | "bottom";
-  currentPlayerId: string | null;
-  gameFinished: boolean;
-}) {
-  if (players.length === 0) return null;
-function getPlayerColor(playerId: string) {
-  const index =
-    Number(playerId.replace("player-", "")) - 1;
 
-  return PLAYER_COLORS[index % PLAYER_COLORS.length];
-}
-  return (
-    <aside
-      className={[
-        "rounded-xl border border-slate-800 bg-black p-3",
-        layout === "side"
-  ? "w-56 shrink-0"
-  : "w-full shrink-0",
-      ].join(" ")}
-    >
-      <h3 className="mb-3 text-sm font-black uppercase text-white">
-  {gameFinished ? "🏆 Partie terminée" : "Classement"}
-</h3>
 
-      <div
-  className={[
-    "gap-2",
-    layout === "side"
-      ? "grid"
-      : "flex flex-wrap justify-center",
-  ].join(" ")}
->
-        {players.map((player) => {
-  const color = getPlayerColor(player.id);
-
-  return (
-    <div
-      key={player.id}
-      className={[
-  `shrink-0 rounded-xl border-2 ${color.border} ${color.bg} p-3 font-black`,
-        layout === "side" ? "w-full" : "min-w-56",
-      ].join(" ")}
-    >
-      <div className="flex items-center justify-between">
-        <span className={`text-lg ${color.text}`}>
-          #{player.rank}
-        </span>
-
-        {player.gap > 0 && (
-          <span className="rounded bg-rose-700 px-2 py-1 text-sm text-white">
-            -{player.gap}
-          </span>
-        )}
-      </div>
-<div className={`mt-1 text-4xl font-black ${color.text}`}>
-        {player.total}
-      </div>
-      <div className="mt-2 text-xl text-white">
-        {player.name}
-      </div>
-	  {!gameFinished && player.id === currentPlayerId && (
-  <div className="mt-1 text-xs font-black text-emerald-400">
-    ▶ Ton tour
-  </div>
-)}
-<div className="mt-2 text-sm text-slate-300">
-  {player.remainingMoves} coup{player.remainingMoves > 1 ? "s" : ""} restant
-  {player.remainingMoves > 1 ? "s" : ""}
-</div>
-
-<div className="mt-2 flex gap-2 text-xs font-black">
-  <span>Quinte {player.straights}</span>
-  <span>Carré {player.fourOfAKinds}</span>
-  <span>Yam {player.yams}</span>
-</div>
-      
-    </div>
-  );
-})}
-      </div>
-    </aside>
-  );
-}
-
-function PlayerSheet({
-  player,
-  getScore,
-  getTopTotal,
-  getBonus,
-  getBottomTotal,
-  getGrandTotal,
-  startEditingPlayer,
-  getPlayerTotal,
-  isCellPlayable,
-  onSelectCell,
-  editingPlayerId,
-editingName,
-setEditingName,
-savePlayerName,
-setEditingPlayerId,
-activeColumns,
-currentPlayerId,
-gameFinished,
-lastScoreAnimation,
-}: {
-  player: Player;
-  getScore: (playerId: string, columnId: string, rowId: YamRow) => ScoreValue;
-  getTopTotal: (playerId: string, columnId: string) => number;
-  getBonus: (playerId: string, columnId: string) => number;
-  getBottomTotal: (playerId: string, columnId: string) => number;
-  getGrandTotal: (playerId: string, columnId: string) => number;
-  getPlayerTotal: (playerId: string) => number;
-  currentPlayerId: string | null;
-gameFinished: boolean;
-  isCellPlayable: (playerId: string, columnId: string, rowId: YamRow) => boolean;
-  onSelectCell: (cell: SelectedCell) => void;
-  startEditingPlayer: (
-  playerId: string,
-  currentName: string
-) => void;
-editingPlayerId: string | null;
-editingName: string;
-setEditingName: (value: string) => void;
-savePlayerName: (playerId: string) => void;
-setEditingPlayerId: (value: string | null) => void;
-activeColumns: typeof columns;
-lastScoreAnimation: {
-  playerId: string;
-  columnId: string;
-  rowId: string;
-  value: number | "X";
-} | null;
-}) {
-  const bottomRows = rows.slice(6);
-const playerIndex =
-  Number(player.id.replace("player-", "")) - 1;
-
-const color =
-  PLAYER_COLORS[playerIndex % PLAYER_COLORS.length];
-  const isCurrentPlayer =
-  player.id === currentPlayerId;
-  return (
-    <div
-  className={`shrink-0 rounded-xl border-2 ${color.border} bg-black p-4`}
->
-     <div className="relative mb-1 text-center">
-  <div className="flex items-center justify-center gap-2">
-    {editingPlayerId === player.id ? (
-      <input
-        autoFocus
-        value={editingName}
-        onChange={(e) => setEditingName(e.target.value)}
-        onBlur={() => savePlayerName(player.id)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            savePlayerName(player.id);
-          }
-
-          if (e.key === "Escape") {
-            setEditingPlayerId(null);
-          }
-        }}
-        className="
-          w-40
-          rounded-md
-          border
-          border-slate-700
-          bg-slate-900
-          px-2
-          py-1
-          text-center
-          font-black
-          text-white
-        "
-      />
-    ) : (
-      <>
-        <h2 className="text-xl font-black text-white">
-          {player.name}
-        </h2>
-
-        <button
-          onClick={() =>
-            startEditingPlayer(player.id, player.name)
-          }
-          className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
-          title="Renommer"
-        >
-          <Pencil size={14} />
-        </button>
-      </>
-    )}
-  </div>
-
-  <div className={`text-3xl font-black ${color.text}`}>
-    {getPlayerTotal(player.id)}
-  </div>
-  {lastScoreAnimation?.playerId === player.id && (
-  <div className={`pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black animate-score-pop ${color.text}`}>
-    {lastScoreAnimation.value === "X"
-  ? "✕"
-  : `+${lastScoreAnimation.value}`}
-  </div>
-)}
-  <div className="h-5 mt-1">
-  {isCurrentPlayer && !gameFinished && (
-    <div
-      className={`text-xs font-black uppercase tracking-wider animate-pulse ${color.text}`}
-    >
-      ▶ Ton tour
-    </div>
-  )}
-</div>
-</div>
-
-      <table className="border-collapse text-center text-sm">
-        <thead>
-          <tr>
-            <th className="w-16"></th>
-            {activeColumns.map((column, columnIndex) => (
-              <th
-                key={column.id}
-                className="h-6 w-10 text-xl font-black text-slate-100"
-              >
-                {column.type === "down" && "↓"}
-                {column.type === "free" && "L"}
-                {column.type === "up" && "↑"}
-              </th>
-            ))}
-          </tr>
-        </thead>
-
-        <tbody>
-          {rows.slice(0, 6).map((row, rowIndex) => (
-            <tr key={row.id}>
-              <RowLabel label={row.label} />
-
-              {activeColumns.map((column, columnIndex) => (
-                <ScoreCell
-                  key={`${column.id}-${row.id}`}
-                  playerId={player.id}
-                  columnId={column.id}
-                  rowId={row.id}
-                  rowIndex={rowIndex}
-				  lastScoreAnimation={lastScoreAnimation}
-                  section="top"
-                  value={getScore(player.id, column.id, row.id)}
-                  playable={isCellPlayable(player.id, column.id, row.id)}
-                  onSelectCell={onSelectCell}
-				  blockStart={
-  columnIndex > 0 &&
-  activeColumns[columnIndex - 1].type !== column.type
-}
-                />
-              ))}
-            </tr>
-          ))}
-
-          <TotalRow
-            label="Total"
-            cells={activeColumns.map((column, columnIndex) => getTopTotal(player.id, column.id))}
-            labelClassName="bg-slate-700 text-white"
-			activeColumns={activeColumns}
-            cellClassName="bg-slate-200 text-rose-700"
-          />
-
-          <TotalRow
-            label="Bonus"
-            cells={activeColumns.map((column, columnIndex) => getBonus(player.id, column.id))}
-            labelClassName="bg-cyan-700 text-white"
-			activeColumns={activeColumns}
-            cellClassName="bg-cyan-100 text-slate-950"
-          />
-
-          <TotalRow
-            label="Total"
-            cells={activeColumns.map(
-              (column) =>
-                getTopTotal(player.id, column.id) +
-                getBonus(player.id, column.id)
-            )}
-            labelClassName="bg-slate-700 text-white"
-            cellClassName="bg-slate-200 text-rose-700"
-			activeColumns={activeColumns}
-          />
-
-          <tr>
-            <td colSpan={activeColumns.length + 1} className="h-3 bg-black"></td>
-          </tr>
-
-          {bottomRows.map((row, rowIndex) => (
-            <FragmentRow
-              key={row.id}
-              row={row}
-              rowIndex={rowIndex}
-              player={player}
-              getScore={getScore}
-              isCellPlayable={isCellPlayable}
-              onSelectCell={onSelectCell}
-			  activeColumns={activeColumns}
-			  lastScoreAnimation={lastScoreAnimation}
-            />
-          ))}
-
-          <TotalRow
-            label="Total"
-            cells={activeColumns.map((column, columnIndex) => getBottomTotal(player.id, column.id))}
-            labelClassName="bg-slate-700 text-white"
-            cellClassName="bg-slate-200 text-rose-700"
-			activeColumns={activeColumns}
-          />
-
-          <TotalRow
-            label="Final"
-            cells={activeColumns.map((column, columnIndex) => getGrandTotal(player.id, column.id))}
-            labelClassName="bg-indigo-700 text-white"
-            cellClassName="bg-indigo-100 text-slate-950"
-			activeColumns={activeColumns}
-          />
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function FragmentRow({
-  row,
-  rowIndex,
-  player,
-  getScore,
-  isCellPlayable,
-  onSelectCell,
-  activeColumns,
-  lastScoreAnimation,
-}: {
-  row: { id: YamRow; label: string };
-  rowIndex: number;
-  player: Player;
-  getScore: (
-    playerId: string,
-    columnId: string,
-    rowId: YamRow
-  ) => ScoreValue;
-  isCellPlayable: (
-    playerId: string,
-    columnId: string,
-    rowId: YamRow
-  ) => boolean;
-  lastScoreAnimation: {
-  playerId: string;
-  columnId: string;
-  rowId: string;
-  value: number | "X";
-} | null;
-  onSelectCell: (cell: SelectedCell) => void;
-  activeColumns: typeof columns;
-}) {
-  return (
-    <>
-      {row.id === "threeOfAKind" && (
-        <tr>
-         <td colSpan={activeColumns.length + 1} className="h-2 bg-slate-950"></td>
-        </tr>
-      )}
-
-      <tr>
-        <RowLabel label={row.label} />
-
-        {activeColumns.map((column, columnIndex) => (
-          <ScoreCell
-            key={`${column.id}-${row.id}`}
-            playerId={player.id}
-            columnId={column.id}
-            rowId={row.id}
-            rowIndex={rowIndex}
-            section="bottom"
-			lastScoreAnimation={lastScoreAnimation}
-            value={getScore(player.id, column.id, row.id)}
-            playable={isCellPlayable(player.id, column.id, row.id)}
-            onSelectCell={onSelectCell}
-			blockStart={
-  columnIndex > 0 &&
-  activeColumns[columnIndex - 1].type !== column.type
-}
-          />
-        ))}
-      </tr>
-    </>
-  );
-}
-
-function RowLabel({ label }: { label: string }) {
-  return (
-    <th className="h-6 w-14 border border-slate-900 bg-slate-900 text-center text-xs font-black text-slate-100">
-      {label}
-    </th>
-  );
-}
-
-function ScoreCell({
-  playerId,
-  columnId,
-  rowId,
-  rowIndex,
-  section,
-  value,
-  playable,
-  onSelectCell,
-  blockStart,
-  lastScoreAnimation,
-}: {
-  playerId: string;
-  columnId: string;
-  rowId: YamRow;
-  rowIndex: number;
-  section: "top" | "bottom";
-  value: ScoreValue;
-  playable: boolean;
-  onSelectCell: (cell: SelectedCell) => void;
-  blockStart: boolean;
-  lastScoreAnimation: {
-    playerId: string;
-    columnId: string;
-    rowId: string;
-    value: number | "X";
-  } | null;
-}) {
-  const colorClass =
-    section === "top" ? getTopColor(rowIndex) : getBottomColor(rowIndex);
-const isLastPlayed =
-  lastScoreAnimation?.playerId === playerId &&
-  lastScoreAnimation?.columnId === columnId &&
-  lastScoreAnimation?.rowId === rowId;
-  return (
-    <td
-      onClick={() => {
-        if (!playable) return;
-        onSelectCell({ playerId, columnId, rowId });
-      }}
-      className={[
-        "h-6 w-10 border border-slate-950 text-sm font-black transition-all duration-200",
-		blockStart ? "border-l-4 border-l-black" : "",
-		isLastPlayed
-  ? "relative z-10 scale-110 ring-4 ring-yellow-300 shadow-lg shadow-yellow-300/60"
-  : "",
-        colorClass,
-        playable
-          ? "cursor-pointer text-slate-950 hover:brightness-110"
-          : "cursor-not-allowed text-slate-950",
-      ].join(" ")}
-    >
-      {value === "X" ? <span className="text-rose-700">✕</span> : value ?? ""}
-    </td>
-  );
-}
-
-function TotalRow({
-  label,
-  cells,
-  activeColumns,
-  labelClassName,
-  cellClassName,
-}: {
-  label: string;
-  cells: number[];
-  activeColumns: typeof columns;
-  labelClassName: string;
-  cellClassName: string;
-}) {
-  return (
-    <tr>
-      <th
-        className={[
-  "h-6 w-14 border border-slate-950 text-center text-xs font-black",
-  labelClassName,
-].join(" ")}
-      >
-        {label}
-      </th>
-
-      {cells.map((value, index) => {
-  const blockStart =
-    index > 0 &&
-    activeColumns[index - 1].type !== activeColumns[index].type;
-
-  return (
-    <td
-      key={index}
-      className={[
-        "h-6 w-10 border border-slate-950 text-sm font-black",
-        blockStart ? "border-l-4 border-l-black" : "",
-        cellClassName,
-      ].join(" ")}
-    >
-      {value}
-    </td>
-  );
-})}
-    </tr>
-  );
-}
 
 function ScoreModal({
   scoreInput,
@@ -1581,7 +1335,7 @@ const winningGap = runnerUp ? winner.total - runnerUp.total : 0;
         </div>
 
         <div className="mt-8 grid gap-2">
-          {players.map((player) => (
+          {players.map((player, index) => (
             <div
               key={player.id}
               className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 font-black"
@@ -1622,26 +1376,4 @@ const winningGap = runnerUp ? winner.total - runnerUp.total : 0;
       </div>
     </div>
   );
-}
-function getTopColor(index: number) {
-  return [
-    "bg-stone-50",
-    "bg-stone-100",
-    "bg-amber-100",
-    "bg-amber-200",
-    "bg-orange-200",
-    "bg-orange-300",
-  ][index];
-}
-
-function getBottomColor(index: number) {
-  return [
-    "bg-sky-100",
-    "bg-cyan-100",
-    "bg-teal-100",
-    "bg-emerald-200",
-    "bg-emerald-300",
-    "bg-lime-300",
-    "bg-green-500",
-  ][index];
 }

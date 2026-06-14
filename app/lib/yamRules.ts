@@ -53,3 +53,26 @@ export const fixedScores: Partial<Record<YamRow, number>> = {
   fourOfAKind: 40,
   yam: 60,
 };
+export type ScoreOption = number | "X";
+
+export function getPossibleValues(rowId: YamRow): ScoreOption[] {
+  if (rowId === "minus" || rowId === "plus") {
+    return ["X", ...Array.from({ length: 26 }, (_, index) => index + 5)];
+  }
+
+  const optionsByRow: Partial<Record<YamRow, number[]>> = {
+    aces: [1, 2, 3, 4, 5],
+    twos: [2, 4, 6, 8, 10],
+    threes: [3, 6, 9, 12, 15],
+    fours: [4, 8, 12, 16, 20],
+    fives: [5, 10, 15, 20, 25],
+    sixes: [6, 12, 18, 24, 30],
+    threeOfAKind: [20],
+    fullHouse: [30],
+    straight: [50],
+    fourOfAKind: [40],
+    yam: [60],
+  };
+
+  return ["X", ...(optionsByRow[rowId] ?? [])];
+}
