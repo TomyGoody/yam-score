@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { columns, rows, getPossibleValues } from "../../../../lib/yamRules";
@@ -109,6 +109,7 @@ useEffect(() => {
     supabase.removeChannel(channel);
   };
 }, [gameId]);
+
   if (message) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
@@ -206,6 +207,7 @@ if (gameStatus === "finished") {
     </main>
   );
 }
+
   return (
     <PlayerMobileSheet
       code={code}
@@ -241,6 +243,7 @@ setCurrentPlayerOrder: (value: number) => void;
 }) {
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 const [filledCells, setFilledCells] = useState<string[]>([]);
 const [playerScores, setPlayerScores] = useState<
   { column_id: string; row_id: string; value: string }[]
@@ -305,7 +308,24 @@ const isMyTurn = selectedOrder === currentPlayerOrder;
 	  const upperRows = rows.filter((row) =>
   ["1", "2", "3", "4", "5", "6", "-", "+"].includes(row.id)
 );
+useEffect(() => {
+  if (!selectedColumnId) return;
 
+  const firstPlayableRow = rows.find((row) =>
+    isMobileCellPlayable(selectedColumnId, row.id)
+  );
+
+  if (!firstPlayableRow) return;
+
+  const timer = setTimeout(() => {
+    rowRefs.current[firstPlayableRow.id]?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }, 150);
+
+  return () => clearTimeout(timer);
+}, [selectedColumnId, filledCells]);
 const lowerRows = rows.filter(
   (row) => !["1", "2", "3", "4", "5", "6", "-", "+"].includes(row.id)
 );
@@ -476,13 +496,26 @@ function renderRowButton(row: (typeof rows)[number]) {
   const isPlayable = isMobileCellPlayable(selectedColumnId, row.id);
 
   return (
-    <div key={row.id}>
+    <div
+  key={row.id}
+  ref={(element) => {
+    rowRefs.current[row.id] = element;
+  }}
+>
       <button
         type="button"
         onClick={() => {
-          if (!isPlayable) return;
-          setSelectedRowId(row.id);
-        }}
+  if (!isPlayable) return;
+
+  setSelectedRowId(row.id);
+
+  setTimeout(() => {
+    rowRefs.current[row.id]?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }, 100);
+}}
         className={[
   "flex h-14 w-full items-center justify-center rounded-xl border font-black transition",
   !isPlayable
@@ -589,6 +622,7 @@ const remainingMoves = totalCells - filledCells.length;
                 type="button"
                 onClick={() => {
   if (!isMyTurn) return;
+
   setSelectedColumnId(column.id);
   setSelectedRowId(null);
 }}
