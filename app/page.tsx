@@ -397,6 +397,7 @@ useEffect(() => {
   return () => window.clearInterval(interval);
 }, [linkToken, playerCount]);
 function handleSelectCell(cell: SelectedCell) {
+  if (gameFinished) return;
   const currentValue = getScore(cell.playerId, cell.columnId, cell.rowId);
   
   if (
@@ -576,8 +577,10 @@ function newGameFromVictory() {
   setScoreInput("");
   setShowVictoryModal(false);
   setHasSavedGame(false);
+  setScreen("home");
 }
 function startEditingPlayer(playerId: string, currentName: string) {
+  if (gameFinished) return;
   setEditingPlayerId(playerId);
   setEditingName(currentName);
 }
@@ -723,6 +726,7 @@ function isValidScoreForRow(rowId: YamRow, value: number) {
 }
 
 async function saveScore(value: number | "X") {
+  if (gameFinished) return;
   if (!selectedCell) return;
   
   const { playerId, columnId, rowId } = selectedCell;
@@ -785,6 +789,7 @@ async function saveScore(value: number | "X") {
 }
 
 function clearScore() {
+  if (gameFinished) return;
   if (!selectedCell) return;
   
   const { playerId, columnId, rowId } = selectedCell;
@@ -953,7 +958,9 @@ useEffect(() => {
 
     setFinishedGameSaved(true);
     setShowVictoryModal(true);
-
+localStorage.removeItem(STORAGE_KEY);
+setHasSavedGame(false);
+setSavedGameInfo(null);
     const linkedPlayers = players.filter((player) => player.linkedUserId);
 
     // Aucun profil associé = rien en base
@@ -1140,10 +1147,9 @@ return (
   )}
   {showVictoryModal && gameFinished && (
     <VictoryModal
-    players={getLeaderboard()}
-    onClose={() => setShowVictoryModal(false)}
-    onNewGame={newGameFromVictory}
-    />
+  players={getLeaderboard()}
+  onBackHome={newGameFromVictory}
+/>
   )}
   {showQuitModal && (
     <QuitModal
@@ -1981,8 +1987,7 @@ function ScoreModal({
 }
 function VictoryModal({
   players,
-  onClose,
-  onNewGame,
+   onBackHome,
 }: {
   players: Array<
   Player & {
@@ -1995,8 +2000,7 @@ function VictoryModal({
     yams: number;
   }
   >;
-  onClose: () => void;
-  onNewGame: () => void;
+  onBackHome: () => void;
 }) {
   const winner = players[0];
   const runnerUp = players[1];
@@ -2057,22 +2061,15 @@ function VictoryModal({
         </div>
       )}
 
-      <div className="mt-8 grid grid-cols-2 gap-3">
-        <button
-          onClick={onClose}
-          className="rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
-        >
-          Fermer
-        </button>
-
-        <button
-          onClick={onNewGame}
-          className="rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
-        >
-          Nouvelle partie
-        </button>
-      </div>
-    </div>
+      <div className="mt-8">
+  <button
+    onClick={onBackHome}
+    className="w-full rounded-xl bg-[#C44934] px-4 py-4 font-black text-white hover:bg-[#D75A43]"
+  >
+    🏠 Retour à l'accueil
+  </button>
+</div>
+  </div>
   </div>
 );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 import { columns, rows, YamRow } from "../../../lib/yamRules";
+import LoadingScreen from "@/app/components/LoadingScreen";
 import GameScreen from "../../../components/GameScreen";
 import Leaderboard from "../../../components/Leaderboard";
 import PlayerSheet from "../../../components/PlayerSheet";
@@ -174,11 +175,7 @@ const readOnlyPlayerSheetProps = {
   }
 
   if (loading || !game) {
-    return (
-      <main className="min-h-screen bg-black p-6 text-white">
-        Chargement...
-      </main>
-    );
+    return <LoadingScreen />;
   }
 function countFigure(playerKey: string, rowId: YamRow) {
   return activeColumns.reduce((total, column) => {
@@ -191,7 +188,7 @@ function countFigure(playerKey: string, rowId: YamRow) {
     <div className="flex h-12 items-center justify-between border-b border-slate-800 bg-black px-3">
       <button
         onClick={() => router.push("/profile")}
-        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800"
+        className="rounded-xl bg-[#241A13] px-4 py-2 text-sm font-black text-white transition hover:bg-[#322217]"
       >
         ← Retour au profil
       </button>

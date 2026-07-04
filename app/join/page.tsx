@@ -328,7 +328,7 @@ if (gameStatus === "playing" && gameId && playerId) {
               value={code}
               onChange={(event) => setCode(event.target.value.toUpperCase())}
               placeholder="Code salon"
-              className="mt-8 w-full rounded-2xl border border-[#9B6A28]/50 bg-[#F4E9DC] p-5 text-center text-4xl font-black uppercase tracking-[0.35em] text-black outline-none focus:border-[#C44934]"
+              className="mt-8 w-full rounded-2xl border border-[#9B6A28]/50 bg-[#F4E9DC] p-5 text-center text-2xl font-black uppercase tracking-[0.35em] text-black outline-none focus:border-[#C44934]"
             />
 
             <button

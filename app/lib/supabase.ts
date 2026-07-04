@@ -21,32 +21,44 @@ export async function ensureUserProfile() {
     user.email ||
     "Utilisateur";
 
-  const avatarUrl = user.user_metadata?.avatar_url || null;
+  const avatarUrl =
+    user.user_metadata?.avatar_url ||
+    user.user_metadata?.picture ||
+    null;
 
-  const { error } = await supabase.from("profiles").upsert(
-    {
+  const { data: existingProfile, error: existingError } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (existingError) {
+    console.error("Erreur lecture profil :", existingError);
+    return null;
+  }
+
+  if (!existingProfile) {
+    const { error: insertError } = await supabase.from("profiles").insert({
       id: user.id,
       display_name: displayName,
       avatar_url: avatarUrl,
-    },
-    {
-      onConflict: "id",
-    }
-  );
+    });
 
-  if (error) {
-  console.error("Erreur création profil :", {
-    message: error.message,
-    details: error.details,
-    hint: error.hint,
-    code: error.code,
-  });
-  return null;
-}
+    if (insertError) {
+      console.error("Erreur création profil :", insertError);
+      return null;
+    }
+
+    return {
+      id: user.id,
+      displayName,
+      avatarUrl,
+    };
+  }
 
   return {
-    id: user.id,
-    displayName,
-    avatarUrl,
+    id: existingProfile.id,
+    displayName: existingProfile.display_name,
+    avatarUrl: existingProfile.avatar_url,
   };
 }

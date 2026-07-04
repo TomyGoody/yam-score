@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase, ensureUserProfile } from "../../lib/supabase";
 import AuthButton from "../../components/AuthButton";
+import LoadingScreen from "@/app/components/LoadingScreen";
 
 type TokenData = {
   token: string;
@@ -102,14 +103,8 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null);
 setSuccessMessage("Profil associé avec succès.");
   }
 
-  if (loading) {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
-      <div className="text-sm font-black uppercase text-[#C44934]">
-        Chargement...
-      </div>
-    </main>
-  );
+  if (loading) {  
+  return <LoadingScreen />;
 }
 
 if (!tokenData || !tokenData.target_player_key) {
