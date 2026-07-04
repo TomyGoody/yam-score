@@ -5,12 +5,7 @@
   --foreground: #171717;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+
 
 @media (prefers-color-scheme: dark) {
   :root {
@@ -32,4 +27,14 @@ body {
 
 .animate-score-pop {
   animation: score-pop 0.8s ease-out forwards;
+}
+.recharts-wrapper svg *:focus {
+  outline: none !important;
+}
+.recharts-surface:focus,
+.recharts-sector:focus,
+.recharts-rectangle:focus,
+.recharts-dot:focus,
+.recharts-active-dot:focus {
+  outline: none !important;
 }
