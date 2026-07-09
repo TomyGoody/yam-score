@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { columns, rows, getPossibleValues } from "../../../../lib/yamRules";
+import LoadingScreen from "../../../../components/LoadingScreen";
 
 type GameMode = "6cols" | "3cols";
 
@@ -28,9 +29,9 @@ const [finalScores, setFinalScores] = useState<
 async function loadFinalResults(currentGameId: string) {
   const { data: playersData } = await supabase
     .from("yam_players")
-    .select("id, name, player_order, final_score")
+    .select("*")
     .eq("game_id", currentGameId);
-
+console.log("FINAL PLAYERS", playersData);
   const { data: scoresData } = await supabase
     .from("yam_scores")
     .select("player_id, value")
@@ -80,6 +81,7 @@ async function loadFinalResults(currentGameId: string) {
   useEffect(() => {
     loadPlayerSession();
   }, []);
+  
 useEffect(() => {
   if (!gameId) return;
 
@@ -98,9 +100,10 @@ useEffect(() => {
 
   setGameStatus(nextStatus);
   setCurrentPlayerOrder(payload.new.current_player_order ?? 1);
-console.log("Realtime reçu :", payload.new);
+
   if (nextStatus === "finished" && gameId) {
     loadFinalResults(gameId);
+    
   }
 }
 
@@ -113,6 +116,7 @@ console.log("Realtime reçu :", payload.new);
 }, [gameId]);
 useEffect(() => {
   if (!gameId) return;
+  if (gameStatus === "finished") return;
 
   const interval = window.setInterval(async () => {
     const { data, error } = await supabase
@@ -127,21 +131,26 @@ useEffect(() => {
     setCurrentPlayerOrder(data.current_player_order ?? 1);
 
     if (data.status === "finished") {
-      loadFinalResults(gameId);
-    }
+  loadFinalResults(gameId);
+  
+}
   }, 1000);
 
   return () => window.clearInterval(interval);
-}, [gameId]);
-  if (message) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
-        <div className="rounded-3xl border border-cyan-500 bg-black p-6 text-center font-black text-cyan-300">
-          {message}
-        </div>
-      </main>
-    );
-  }
+}, [gameId, gameStatus]);
+  if (message === "Chargement...") {
+  return <LoadingScreen />;
+}
+
+if (message) {
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-black px-4">
+      <div className="rounded-3xl border border-[#9B6A28]/70 bg-black p-6 text-center font-black text-[#C44934]">
+        {message}
+      </div>
+    </main>
+  );
+}
 if (gameStatus === "waiting") {
   return (
     <main className="relative flex min-h-screen items-center justify-center bg-black px-4 text-white">
@@ -174,7 +183,7 @@ if (gameStatus === "waiting") {
 const finalRanking = finalPlayers
   .map((player) => ({
     ...player,
-    total: player.final_score ?? 0,
+    total: Number(player.final_score ?? 0),
   }))
   .sort((a, b) => b.total - a.total);
 
@@ -218,7 +227,7 @@ if (gameStatus === "finished") {
           </div>
 
           <div className="mt-2 text-xl font-black">
-            {myFinalResult?.total ?? 0} points
+            {myFinalResult ? myFinalResult.total : 0} points
           </div>
         </div>
 
@@ -480,6 +489,7 @@ if (updateError) {
 setSelectedRowId(null);
 setSelectedColumnId(null);
   }
+  
 function renderRowButton(row: (typeof rows)[number]) {
   if (!selectedColumnId) return null;
 

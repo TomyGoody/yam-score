@@ -1,0 +1,179 @@
+import { supabase } from "./supabase";
+import { columns, rows, YamRow } from "./yamRules";
+
+type ScoreValue = number | "X" | null;
+
+function scoreToNumber(value: ScoreValue) {
+  return typeof value === "number" ? value : 0;
+}
+
+export async function rebuildProfileStats(profileId: string) {
+  const { data: games, error: gamesError } = await supabase
+    .from("local_game_players")
+    .select(`
+      game_id,
+      player_key,
+      final_score,
+      final_rank,
+      yams_count,
+      local_games!inner(
+        mode,
+        player_count,
+        status,
+        source
+      )
+    `)
+    .eq("profile_id", profileId)
+    .eq("local_games.status", "finished");
+
+  if (gamesError || !games) {
+    console.error("Erreur rebuild stats - parties", gamesError);
+    return;
+  }
+
+  const gameIds = games.map((game) => game.game_id);
+
+  const { data: scoreRows, error: scoresError } =
+    gameIds.length > 0
+      ? await supabase
+          .from("local_game_scores")
+          .select("game_id, player_key, column_id, row_id, value")
+          .in("game_id", gameIds)
+          
+      : { data: [], error: null };
+
+  if (scoresError) {
+    console.error("Erreur rebuild stats - scores", scoresError);
+    return;
+  }
+
+  const stats = {
+    games_played_3: 0,
+    games_played_6: 0,
+    wins_3: 0,
+    wins_6: 0,
+    best_score_3: 0,
+    best_score_6: 0,
+    total_points_3: 0,
+    total_points_6: 0,
+    yams_total: 0,
+    four_of_a_kind_total: 0,
+    full_house_total: 0,
+    straight_total: 0,
+    three_of_a_kind_total: 0,
+    bonus_total: 0,
+    perfect_games_3: 0,
+    perfect_games_6: 0,
+    local_games: 0,
+    salon_games: 0,
+    games_2_players: 0,
+    games_3_players: 0,
+    games_4_players: 0,
+    games_5_players: 0,
+    games_6_players: 0,
+  };
+
+  for (const game of games) {
+    const gameInfo = Array.isArray(game.local_games)
+      ? game.local_games[0]
+      : game.local_games;
+
+    if (!gameInfo) continue;
+
+    const mode = gameInfo.mode as "3cols" | "6cols";
+    const source = gameInfo.source ?? "local";
+    const playerCount = gameInfo.player_count;
+
+    const activeColumns =
+      mode === "6cols" ? columns : [columns[0], columns[2], columns[4]];
+
+    const scores = (scoreRows ?? []).filter(
+      (score) =>
+        score.game_id === game.game_id &&
+        score.player_key === game.player_key
+    );
+
+    function getScore(columnId: string, rowId: YamRow): ScoreValue {
+      const score = scores.find(
+        (item) => item.column_id === columnId && item.row_id === rowId
+      );
+
+      if (!score) return null;
+      return score.value === "X" ? "X" : Number(score.value);
+    }
+
+    function countFigure(rowId: YamRow) {
+      return activeColumns.reduce((total, column) => {
+        const value = getScore(column.id, rowId);
+        return value !== null && value !== "X" ? total + 1 : total;
+      }, 0);
+    }
+
+    function getTopTotal(columnId: string) {
+      return rows
+        .slice(0, 6)
+        .reduce(
+          (total, row) =>
+            total + scoreToNumber(getScore(columnId, row.id)),
+          0
+        );
+    }
+
+    function getBonus(columnId: string) {
+      return getTopTotal(columnId) >= 60 ? 35 : 0;
+    }
+
+    function hasNoX() {
+      return activeColumns.every((column) =>
+        rows.every((row) => getScore(column.id, row.id) !== "X")
+      );
+    }
+
+    const finalScore = game.final_score ?? 0;
+    const finalRank = game.final_rank ?? 999;
+
+    if (mode === "3cols") {
+      stats.games_played_3 += 1;
+      stats.total_points_3 += finalScore;
+      stats.best_score_3 = Math.max(stats.best_score_3, finalScore);
+      if (finalRank === 1 && playerCount >= 2) stats.wins_3 += 1;
+      if (hasNoX()) stats.perfect_games_3 += 1;
+    } else {
+      stats.games_played_6 += 1;
+      stats.total_points_6 += finalScore;
+      stats.best_score_6 = Math.max(stats.best_score_6, finalScore);
+      if (finalRank === 1 && playerCount >= 2) stats.wins_6 += 1;
+      if (hasNoX()) stats.perfect_games_6 += 1;
+    }
+
+    if (source === "salon") {
+      stats.salon_games += 1;
+    } else {
+      stats.local_games += 1;
+    }
+
+    stats.yams_total += countFigure("yam");
+    stats.three_of_a_kind_total += countFigure("threeOfAKind");
+    stats.full_house_total += countFigure("fullHouse");
+    stats.four_of_a_kind_total += countFigure("fourOfAKind");
+    stats.straight_total += countFigure("straight");
+    stats.bonus_total += activeColumns.filter(
+      (column) => getBonus(column.id) > 0
+    ).length;
+
+    if (playerCount === 2) stats.games_2_players += 1;
+    if (playerCount === 3) stats.games_3_players += 1;
+    if (playerCount === 4) stats.games_4_players += 1;
+    if (playerCount === 5) stats.games_5_players += 1;
+    if (playerCount === 6) stats.games_6_players += 1;
+  }
+console.log("REBUILD STATS FINAL", stats);
+  const { error } = await supabase.rpc("replace_my_profile_stats", {
+    p_profile_id: profileId,
+    p_stats: stats,
+  });
+
+  if (error) {
+    console.error("Erreur replace profile_stats", error);
+  }
+}

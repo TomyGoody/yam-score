@@ -7,7 +7,17 @@ import GameScreen from "@/app/components/GameScreen";
 import QRCode from "react-qr-code";
 import PlayerSheet from "@/app/components/PlayerSheet";
 import Leaderboard from "@/app/components/Leaderboard";
-import { columns, rows, YamRow } from "@/app/lib/yamRules";
+import { columns, rows, YamRow, getPossibleValues } from "@/app/lib/yamRules";
+import { getLevelFromTotalXp } from "@/app/lib/levelRules";
+import VictoryModal from "@/app/components/VictoryModal";
+import {
+  achievementDefinitions,
+  BADGE_XP,
+  FIGURE_XP,
+  getParticipationXp,
+  getRankXp,
+  getUnlockedMilestoneIndexes,
+} from "@/app/lib/xpRules";
 
 type Player = {
   id: string;
@@ -43,11 +53,29 @@ export default function SalonAdminPage() {
   const [currentPlayerOrder, setCurrentPlayerOrder] = useState(1);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [showFinalModal, setShowFinalModal] = useState(true);
+  const [xpResultsByPlayer, setXpResultsByPlayer] = useState<
+  Record<
+    string,
+    {
+      xpGain: number;
+      oldLevel: number;
+      newLevel: number;
+      baseXp: number;
+      badgeXp: number;
+      badges: {
+        label: string;
+        milestone: number;
+        xp: number;
+      }[];
+    }
+  >
+>({});
   const [salonSavedToProfile, setSalonSavedToProfile] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const params = useParams();
   const router = useRouter();
-  
+  const [selectedXpPlayerId, setSelectedXpPlayerId] = useState<string | null>(null);
   const code = String(params.code).toUpperCase();
   const joinUrl =
   typeof window !== "undefined"
@@ -149,7 +177,14 @@ export default function SalonAdminPage() {
     
     setStatus("playing");
   }
-  
+  useEffect(() => {
+  async function loadCurrentUser() {
+    const { data } = await supabase.auth.getUser();
+    setCurrentUserId(data.user?.id ?? null);
+  }
+
+  loadCurrentUser();
+}, []);
   // INIT
   useEffect(() => {
     loadSalon();
@@ -295,7 +330,7 @@ export default function SalonAdminPage() {
   }
   
   function getBonus(playerId: string, columnId: string) {
-    return getTopTotal(playerId, columnId) >= 60 ? 30 : 0;
+    return getTopTotal(playerId, columnId) >= 60 ? 35 : 0;
   }
   
   function getBottomTotal(playerId: string, columnId: string) {
@@ -434,6 +469,51 @@ export default function SalonAdminPage() {
     setCurrentPlayerOrder(player.player_order);
     setMessage("Dernier coup annulé.");
   }
+  async function simulateSalonGame() {
+  if (!gameId) return;
+
+  const activeColumns =
+    gameMode === "6cols"
+      ? columns
+      : [columns[0], columns[2], columns[4]];
+
+  for (const row of rows) {
+    for (const player of players.sort(
+      (a, b) => a.player_order - b.player_order
+    )) {
+      for (const column of activeColumns) {
+        const values = getPossibleValues(row.id);
+
+        const value =
+          Math.random() < 0.15
+            ? "X"
+            : values[Math.floor(Math.random() * values.length)];
+
+        const { error } = await supabase
+          .from("yam_scores")
+          .upsert(
+            {
+              game_id: gameId,
+              player_id: player.id,
+              column_id: column.id,
+              row_id: row.id,
+              value: String(value),
+            },
+            {
+              onConflict: "game_id,player_id,column_id,row_id",
+            }
+          );
+
+        if (error) {
+          console.error(error);
+          return;
+        }
+      }
+    }
+  }
+
+  await loadScores(gameId);
+}
   async function saveSalonToProfiles() {
     if (!gameId) return;
     
@@ -441,7 +521,9 @@ export default function SalonAdminPage() {
     
     if (linkedPlayers.length === 0) return;
     
-    const ownerId = linkedPlayers[0].profile_id;
+    if (!currentUserId) return;
+
+const ownerId = currentUserId;
     
     const { data: localGame, error: gameError } = await supabase
     .from("local_games")
@@ -452,6 +534,7 @@ export default function SalonAdminPage() {
       created_by: ownerId,
       linked_profile_id: ownerId,
       finished_at: new Date().toISOString(),
+      source: "salon",
     })
     .select("id")
     .single();
@@ -462,7 +545,28 @@ export default function SalonAdminPage() {
     }
     
     const leaderboard = getLeaderboard();
-    
+
+const { error: finalScoresError } = await supabase.rpc(
+  "set_salon_final_scores",
+  {
+    p_game_id: gameId,
+    p_scores: leaderboard.map((player) => ({
+      player_id: player.id,
+      final_score: player.total,
+    })),
+  }
+);
+
+if (finalScoresError) {
+  console.error("Erreur scores finaux salon", finalScoresError);
+}
+const { data: test } = await supabase
+  .from("yam_players")
+  .select("id, name, final_score")
+  .eq("game_id", gameId);
+
+console.log("FINAL SCORES SAVED", test);
+await loadPlayers(gameId);
     const { error: playersError } = await supabase
     .from("local_game_players")
     .insert(
@@ -470,13 +574,15 @@ export default function SalonAdminPage() {
         const originalPlayer = players.find((item) => item.id === player.id);
         
         return {
-          game_id: localGame.id,
-          player_key: player.id,
-          display_name: player.name,
-          profile_id: originalPlayer?.profile_id ?? null,
-          player_order: originalPlayer?.player_order ?? player.rank,
-          final_score: player.total,
-        };
+  game_id: localGame.id,
+  player_key: player.id,
+  display_name: player.name,
+  profile_id: originalPlayer?.profile_id ?? null,
+  player_order: originalPlayer?.player_order ?? player.rank,
+  final_score: player.total,
+  final_rank: player.rank,
+  yams_count: player.yams,
+};
       })
     );
     
@@ -510,9 +616,163 @@ if (scoreRows.length > 0) {
   .from("local_game_scores")
   .insert(scoreRows);
   
+
   if (scoresError) {
     console.error("Erreur sauvegarde salon local_game_scores", scoresError);
   }
+}
+for (const player of leaderboard) {
+  const originalPlayer = players.find((item) => item.id === player.id);
+
+  if (!originalPlayer?.profile_id) continue;
+
+  const { data: statsBefore } = await supabase
+    .from("profile_stats")
+    .select("*")
+    .eq("profile_id", originalPlayer.profile_id)
+    .maybeSingle();
+
+  const is3Cols = gameMode === "3cols";
+
+  await supabase.rpc("upsert_profile_stats_for_local_game_player", {
+    p_game_id: localGame.id,
+    p_profile_id: originalPlayer.profile_id,
+
+    p_games_played_3: is3Cols ? 1 : 0,
+    p_games_played_6: is3Cols ? 0 : 1,
+
+    p_wins_3: is3Cols && player.rank === 1 && playerCount >= 2 ? 1 : 0,
+    p_wins_6: !is3Cols && player.rank === 1 && playerCount >= 2 ? 1 : 0,
+
+    p_best_score_3: is3Cols ? player.total : 0,
+    p_best_score_6: !is3Cols ? player.total : 0,
+
+    p_total_points_3: is3Cols ? player.total : 0,
+    p_total_points_6: !is3Cols ? player.total : 0,
+
+    p_yams_total: player.yams,
+    p_four_of_a_kind_total: player.fourOfAKinds,
+    p_full_house_total: countFigure(player.id, "fullHouse"),
+    p_straight_total: player.straights,
+    p_three_of_a_kind_total: countFigure(player.id, "threeOfAKind"),
+
+    p_bonus_total: activeColumns.filter(
+      (column) => getBonus(player.id, column.id) > 0
+    ).length,
+
+    p_perfect_games_3: 0,
+    p_perfect_games_6: 0,
+
+    p_local_games: 0,
+    p_salon_games: 1,
+
+    p_games_2_players: playerCount === 2 ? 1 : 0,
+    p_games_3_players: playerCount === 3 ? 1 : 0,
+    p_games_4_players: playerCount === 4 ? 1 : 0,
+    p_games_5_players: playerCount === 5 ? 1 : 0,
+    p_games_6_players: playerCount === 6 ? 1 : 0,
+  });
+
+  const { data: statsAfter } = await supabase
+    .from("profile_stats")
+    .select("*")
+    .eq("profile_id", originalPlayer.profile_id)
+    .maybeSingle();
+
+  const potentialBadges = achievementDefinitions.flatMap((definition) => {
+    const beforeValue = Number(statsBefore?.[definition.metric] ?? 0);
+    const afterValue = Number(statsAfter?.[definition.metric] ?? 0);
+
+    const beforeUnlocked = getUnlockedMilestoneIndexes(
+      beforeValue,
+      definition.milestones
+    );
+
+    const afterUnlocked = getUnlockedMilestoneIndexes(
+      afterValue,
+      definition.milestones
+    );
+
+    return afterUnlocked
+      .filter((index) => !beforeUnlocked.includes(index))
+      .map((index) => ({
+        id: definition.id,
+        label: definition.label,
+        milestone: definition.milestones[index],
+        xp: BADGE_XP[index] ?? 0,
+      }));
+  });
+
+  const { data: claimedBadges } = await supabase.rpc(
+    "claim_profile_badges_for_local_game_player",
+    {
+      p_game_id: localGame.id,
+      p_profile_id: originalPlayer.profile_id,
+      p_badges: potentialBadges,
+    }
+  );
+
+  const awardedBadges = (claimedBadges ?? []).map((badge: any) => {
+  const definition = potentialBadges.find(
+    (item) =>
+      item.id === badge.claimed_badge_id &&
+      item.milestone === badge.claimed_milestone
+  );
+
+  return {
+    label: definition?.label ?? badge.claimed_badge_id,
+    milestone: badge.claimed_milestone,
+    xp: badge.claimed_xp_awarded,
+  };
+});
+
+const badgeXp = awardedBadges.reduce(
+  (total: number, badge: { xp: number }) => total + badge.xp,
+  0
+);
+
+  const baseXp =
+    getParticipationXp(gameMode) +
+    getRankXp(player.rank, playerCount, gameMode) +
+    countFigure(player.id, "threeOfAKind") * FIGURE_XP.threeOfAKind +
+    countFigure(player.id, "fullHouse") * FIGURE_XP.fullHouse +
+    player.fourOfAKinds * FIGURE_XP.fourOfAKind +
+    player.straights * FIGURE_XP.straight +
+    player.yams * FIGURE_XP.yam +
+    activeColumns.filter((column) => getBonus(player.id, column.id) > 0).length *
+      FIGURE_XP.bonus;
+
+  const { data: xpResult, error: xpError } = await supabase.rpc(
+  "add_profile_xp_for_local_game_player",
+  {
+    p_game_id: localGame.id,
+    p_profile_id: originalPlayer.profile_id,
+    p_xp_gain: baseXp + badgeXp,
+  }
+);
+
+if (xpError) {
+  console.error("Erreur ajout XP salon", xpError);
+} else {
+  const result = Array.isArray(xpResult) ? xpResult[0] : xpResult;
+
+  if (result) {
+    const totalXpAfter = result.total_xp;
+    const totalXpBefore = totalXpAfter - result.xp_gained;
+
+    setXpResultsByPlayer((current) => ({
+      ...current,
+      [player.id]: {
+        xpGain: result.xp_gained,
+        oldLevel: getLevelFromTotalXp(totalXpBefore),
+        newLevel: getLevelFromTotalXp(totalXpAfter),
+        baseXp,
+        badgeXp,
+        badges: awardedBadges,
+      },
+    }));
+  }
+}
 }
 }
 const gameFinished =
@@ -551,6 +811,16 @@ if (status === "playing" || status === "finished") {
     Annuler le dernier coup
     </button>
     </div>
+    {process.env.NODE_ENV === "development" && (
+  <div className="absolute left-4 top-2 z-40">
+    <button
+      onClick={simulateSalonGame}
+      className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-black text-white hover:bg-purple-600"
+    >
+      🧪 Simuler une partie
+    </button>
+  </div>
+)}
     <GameScreen
     fitToScreen={fitToScreen}
     setFitToScreen={setFitToScreen}
@@ -633,71 +903,13 @@ if (status === "playing" || status === "finished") {
       </div>
     )}
     {status === "finished" && showFinalModal && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-      <div className="w-full max-w-xl rounded-3xl border border-[#9B6A28]/70 bg-black p-8 text-center shadow-2xl">
-      <div className="text-6xl">🏆</div>
-      
-      <div className="mt-3 text-sm font-black uppercase text-[#C44934]">
-      Partie terminée
-      </div>
-      
-      <h2 className="mt-1 text-3xl font-black text-white">
-      Classement final
-      </h2>
-      
-      <div className="mt-6 grid gap-3">
-      {getLeaderboard().map((player) => (
-        <div
-        key={player.id}
-        className={[
-          "flex items-center justify-between rounded-2xl px-5 py-4 font-black",
-          player.rank === 1
-          ? "bg-[#C44934] text-white"
-          : "bg-[#F4E9DC] text-black",
-        ].join(" ")}
-        >
-        <div className="text-left">
-        <div className="text-lg">
-        {player.rank === 1
-          ? "🥇"
-          : player.rank === 2
-          ? "🥈"
-          : player.rank === 3
-          ? "🥉"
-          : `#${player.rank}`}{" "}
-          {player.name}
-          </div>
-          
-          <div className="mt-1 text-xs opacity-70">
-          Joueur {player.player_order}
-          </div>
-          </div>
-          
-          <div className="text-2xl">
-          {player.total}
-          </div>
-          </div>
-        ))}
-        </div>
-        
-        <div className="mt-6 grid grid-cols-2 gap-3">
-        <button
-        onClick={() => router.push("/")}
-        className="rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
-        >
-        Retour accueil
-        </button>
-        
-        <button
-        onClick={() => setShowFinalModal(false)}
-        className="rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
-        >
-        Voir la grille
-        </button>
-        </div>
-        </div>
-        </div>
-      )}
+  <VictoryModal
+    players={getLeaderboard()}
+    xpResults={xpResultsByPlayer}
+    onBackHome={() => router.push("/")}
+    onViewGrid={() => setShowFinalModal(false)}
+  />
+)}
       </main>
     );
   }

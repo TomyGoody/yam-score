@@ -147,7 +147,7 @@ const readOnlyPlayerSheetProps = {
   }
 
   function getBonus(playerKey: string, columnId: string) {
-    return getTopTotal(playerKey, columnId) >= 60 ? 30 : 0;
+    return getTopTotal(playerKey, columnId) >= 60 ? 35 : 0;
   }
 
   function getBottomTotal(playerKey: string, columnId: string) {

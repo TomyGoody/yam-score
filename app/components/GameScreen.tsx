@@ -16,6 +16,7 @@ export default function GameScreen({
   PlayerSheetComponent,
   playerSheetProps,
   LeaderboardComponent,
+  devFillRandomGame,
   leaderboardProps,
 
 }: any) {
@@ -50,7 +51,14 @@ export default function GameScreen({
           >
             Plein écran
           </button>
-
+{process.env.NODE_ENV === "development" && devFillRandomGame && (
+  <button
+    onClick={devFillRandomGame}
+    className="rounded-lg bg-purple-700 px-4 py-2 text-sm font-black text-white hover:bg-purple-600"
+  >
+    🧪 Remplir
+  </button>
+)}
           <button
             onClick={quitGame}
             className="rounded-lg bg-[#C44934] px-4 py-2 text-sm font-black hover:bg-[#D75A43]"
@@ -61,43 +69,39 @@ export default function GameScreen({
       </div>
 
       <div
-        className={[
-          "relative z-10 flex flex-1 gap-3 p-3",
-          useSideLeaderboard ? "flex-row" : "flex-col",
-        ].join(" ")}
-      >
-        <div
-          ref={viewportRef}
-          className={[
-            "flex-1",
-            fitToScreen ? "overflow-hidden" : "overflow-x-auto overflow-y-hidden",
-          ].join(" ")}
-        >
-          <div
-            ref={sheetRef}
-            style={{
-              transform: `translateX(${fitOffsetX}px) scale(${fitScale})`,
-              transformOrigin: "top left",
-            }}
-            className="flex w-max items-start gap-3"
-          >
-            {players.map((player: any, index: number) => (
-              <PlayerSheetComponent
-                key={player.id}
-                player={player}
-                
-                {...playerSheetProps}
-              />
-            ))}
-          </div>
-        </div>
-
-        <LeaderboardComponent
-          layout={useSideLeaderboard ? "side" : "bottom"}
-		  
-          {...leaderboardProps}
+  ref={viewportRef}
+  className={[
+    "relative z-10 flex flex-1 p-3",
+    fitToScreen ? "overflow-hidden" : "overflow-auto",
+  ].join(" ")}
+>
+  <div
+    ref={sheetRef}
+    style={{
+      transform: `translateX(${fitOffsetX}px) scale(${fitScale})`,
+      transformOrigin: "top left",
+    }}
+    className={[
+      "flex w-max gap-3",
+      useSideLeaderboard ? "items-start" : "flex-col",
+    ].join(" ")}
+  >
+    <div className="flex w-max items-start gap-3">
+      {players.map((player: any) => (
+        <PlayerSheetComponent
+          key={player.id}
+          player={player}
+          {...playerSheetProps}
         />
-      </div>
+      ))}
+    </div>
+
+    <LeaderboardComponent
+      layout={useSideLeaderboard ? "side" : "bottom"}
+      {...leaderboardProps}
+    />
+  </div>
+</div>
     </section>
   );
 }

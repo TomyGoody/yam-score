@@ -78,13 +78,16 @@ export default function AuthButton() {
   }, []);
   
   async function signInWithGoogle() {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-  }
+  const currentPath =
+    window.location.pathname + window.location.search;
+
+  await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}${currentPath}`,
+    },
+  });
+}
   
   async function signInWithEmail() {
     if (!email.trim()) {
