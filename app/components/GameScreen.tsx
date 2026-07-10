@@ -16,12 +16,15 @@ export default function GameScreen({
   PlayerSheetComponent,
   playerSheetProps,
   LeaderboardComponent,
+
+fitOffsetY,
+
   devFillRandomGame,
   leaderboardProps,
 
 }: any) {
   return (
-    <section className="relative flex h-full flex-col overflow-y-auto overflow-x-hidden">
+    <section className="relative flex h-full min-h-0 flex-col overflow-hidden">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
         <Image
           src="/favicon.png"
@@ -68,19 +71,30 @@ export default function GameScreen({
         </div>
       </div>
 
-      <div
+     <div
   ref={viewportRef}
   className={[
-    "relative z-10 flex flex-1 p-3",
-    fitToScreen ? "overflow-hidden" : "overflow-auto",
+    "relative z-10 min-h-0 flex-1",
+    fitToScreen ? "overflow-hidden" : "overflow-auto p-3",
   ].join(" ")}
 >
   <div
     ref={sheetRef}
-    style={{
-      transform: `translateX(${fitOffsetX}px) scale(${fitScale})`,
-      transformOrigin: "top left",
-    }}
+    style={
+      fitToScreen
+        ? {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            transform: `translate(${fitOffsetX}px, ${fitOffsetY}px) scale(${fitScale})`,
+            transformOrigin: "top left",
+          }
+        : {
+            position: "relative",
+            transform: "none",
+            transformOrigin: "top left",
+          }
+    }
     className={[
       "flex w-max gap-3",
       useSideLeaderboard ? "items-start" : "flex-col",

@@ -122,6 +122,7 @@ export default function Home() {
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [scores, setScores] = useState<Scores>({});
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+  const [fitOffsetY, setFitOffsetY] = useState(0);
   const [lastScoreAnimation, setLastScoreAnimation] = useState<{
     playerId: string;
     columnId: string;
@@ -344,38 +345,80 @@ useEffect(() => {
   function updateLayout() {
     const viewport = viewportRef.current;
     const sheet = sheetRef.current;
-    
+
     if (!viewport || !sheet) return;
-    
-    const contentWidth = sheet.scrollWidth;
-    const contentHeight = sheet.scrollHeight;
-    
-    let nextScale = 1;
-    
-    if (fitToScreen) {
-      const safePadding = 24;
-      const scaleX = (viewport.clientWidth - safePadding) / contentWidth;
-      const scaleY = (viewport.clientHeight - safePadding) / contentHeight;
-      
-      nextScale = Math.min(scaleX, scaleY);
+
+    if (!fitToScreen) {
+      setFitScale(1);
+      setFitOffsetX(0);
+      setFitOffsetY(0);
+      return;
     }
-    
+
+    const contentWidth = sheet.offsetWidth;
+    const contentHeight = sheet.offsetHeight;
+
+    const availableWidth = viewport.clientWidth;
+    const availableHeight = viewport.clientHeight;
+
+    if (
+      contentWidth <= 0 ||
+      contentHeight <= 0 ||
+      availableWidth <= 0 ||
+      availableHeight <= 0
+    ) {
+      return;
+    }
+
+    const scaleX = availableWidth / contentWidth;
+    const scaleY = availableHeight / contentHeight;
+
+    // Utilise au maximum l'espace disponible sans jamais dépasser.
+    const nextScale = Math.min(scaleX, scaleY);
+
     const scaledWidth = contentWidth * nextScale;
+    const scaledHeight = contentHeight * nextScale;
+
     const nextOffsetX = Math.max(
       0,
-      (viewport.clientWidth - scaledWidth) / 2
+      (availableWidth - scaledWidth) / 2
     );
-    
+
+    const nextOffsetY = Math.max(
+      0,
+      (availableHeight - scaledHeight) / 2
+    );
+
     setFitScale(nextScale);
     setFitOffsetX(nextOffsetX);
+    setFitOffsetY(nextOffsetY);
   }
-  
+
   const frame = requestAnimationFrame(updateLayout);
+
+  const resizeObserver = new ResizeObserver(() => {
+    requestAnimationFrame(updateLayout);
+  });
+
+  const viewport = viewportRef.current;
+  const sheet = sheetRef.current;
+
+  if (viewport) {
+    resizeObserver.observe(viewport);
+  }
+
+  if (sheet) {
+    resizeObserver.observe(sheet);
+  }
+
   window.addEventListener("resize", updateLayout);
-  
+  document.addEventListener("fullscreenchange", updateLayout);
+
   return () => {
     cancelAnimationFrame(frame);
+    resizeObserver.disconnect();
     window.removeEventListener("resize", updateLayout);
+    document.removeEventListener("fullscreenchange", updateLayout);
   };
 }, [fitToScreen, players.length, gameMode]);
 useEffect(() => {
@@ -448,7 +491,7 @@ async function createSalon() {
   
   const code = generateSalonCode();
   
-  const { data, error } = await supabase
+  const { error } = await supabase
   .from("yam_games")
   .insert({
     code,
@@ -492,44 +535,6 @@ async function loadSalonPlayers() {
   }
   
   setSalonPlayers(data ?? []);
-}
-async function startSalonGame() {
-  if (!salonGameId) return;
-  
-  const { data: playersData, error: playersError } = await supabase
-  .from("yam_players")
-  .select("id, name, player_order")
-  .eq("game_id", salonGameId)
-  .order("player_order", { ascending: true });
-  
-  if (playersError) {
-    console.error("Erreur récupération joueurs", playersError);
-    return;
-  }
-  
-  const salonPlayersAsLocalPlayers = (playersData ?? []).map((player) => ({
-    id: player.id,
-    name: player.name,
-    playerOrder: player.player_order,
-    linkedUserId: null,
-  }));
-  
-  setPlayers(salonPlayersAsLocalPlayers);
-  setScores({});
-  setSalonCode(null);
-  setFitToScreen(false);
-  setFitScale(1);
-  
-  const { error } = await supabase
-  .from("yam_games")
-  .update({
-    status: "playing",
-  })
-  .eq("id", salonGameId);
-  
-  if (error) {
-    console.error("Erreur démarrage salon", error);
-  }
 }
 useEffect(() => {
   if (!salonGameId) return;
@@ -626,13 +631,6 @@ function resumeGame() {
   setGameMode(data.gameMode ?? "6cols");
   setHasSavedGame(false);
   setScreen("game");
-}
-function startFreshGame() {
-  localStorage.removeItem(STORAGE_KEY);
-  
-  setPlayers([]);
-  setScores({});
-  setHasSavedGame(false);
 }
 function savePlayerName(playerId: string) {
   if (!editingName.trim()) return;
@@ -1402,6 +1400,7 @@ return (
     setFitToScreen={setFitToScreen}
     toggleFullscreen={toggleFullscreen}
     quitGame={quitGame}
+    fitOffsetY={fitOffsetY}
     useSideLeaderboard={useSideLeaderboard}
     viewportRef={viewportRef}
     sheetRef={sheetRef}
@@ -1634,9 +1633,6 @@ function StartScreen({
   resumeGame,
   partyMode,
   setPartyMode,
-  currentUserId,
-  associateProfile,
-  setAssociateProfile,
 }: {
   playerCount: number;
   setPlayerCount: (count: number) => void;
@@ -2101,48 +2097,6 @@ Lancer la partie
 </div>
 </section>
 );
-}
-function GameToolbar({
-  fitToScreen,
-  setFitToScreen,
-  toggleFullscreen,
-  quitGame,
-}: {
-  fitToScreen: boolean;
-  setFitToScreen: (value: (current: boolean) => boolean) => void;
-  toggleFullscreen: () => void;
-  quitGame: () => void;
-}) {
-  return (
-    <div className="flex h-12 items-center justify-between border-b border-slate-800 bg-black px-3">
-    <div className="text-xs font-black uppercase text-white">
-    {fitToScreen ? "Affichage adapté" : "Affichage normal"}
-    </div>
-    
-    <div className="flex gap-2">
-    <button
-    onClick={() => setFitToScreen((current) => !current)}
-    className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-black hover:bg-slate-700"
-    >
-    {fitToScreen ? "Taille normale" : "Adapter à l'écran"}
-    </button>
-    
-    <button
-    onClick={toggleFullscreen}
-    className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-black hover:bg-slate-700"
-    >
-    Plein écran
-    </button>
-    
-    <button
-    onClick={quitGame}
-    className="rounded-lg bg-rose-700 px-4 py-2 text-sm font-black hover:bg-rose-600"
-    >
-    Quitter
-    </button>
-    </div>
-    </div>
-  );
 }
 
 
