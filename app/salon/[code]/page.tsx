@@ -50,6 +50,7 @@ export default function SalonAdminPage() {
   const [fitToScreen, setFitToScreen] = useState(false);
   const [fitScale, setFitScale] = useState(1);
   const [fitOffsetX, setFitOffsetX] = useState(0);
+  const [fitOffsetY, setFitOffsetY] = useState(0);
   const [currentPlayerOrder, setCurrentPlayerOrder] = useState(1);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [showFinalModal, setShowFinalModal] = useState(true);
@@ -195,44 +196,85 @@ export default function SalonAdminPage() {
     loadPlayers(gameId);
     loadScores(gameId);
   }, [gameId]);
-  useEffect(() => {
-    function updateLayout() {
-      const viewport = viewportRef.current;
-      const sheet = sheetRef.current;
-      
-      if (!viewport || !sheet) return;
-      
-      const contentWidth = sheet.scrollWidth;
-      const contentHeight = sheet.scrollHeight;
-      
-      let nextScale = 1;
-      
-      if (fitToScreen) {
-        const safePadding = 24;
-        const scaleX = (viewport.clientWidth - safePadding) / contentWidth;
-        const scaleY = (viewport.clientHeight - safePadding) / contentHeight;
-        
-        nextScale = Math.min(scaleX, scaleY);
-      }
-      
-      const scaledWidth = contentWidth * nextScale;
-      const nextOffsetX = Math.max(
-        0,
-        (viewport.clientWidth - scaledWidth) / 2
-      );
-      
-      setFitScale(nextScale);
-      setFitOffsetX(nextOffsetX);
+ useEffect(() => {
+  function updateLayout() {
+    const viewport = viewportRef.current;
+    const sheet = sheetRef.current;
+
+    if (!viewport || !sheet) return;
+
+    if (!fitToScreen) {
+      setFitScale(1);
+      setFitOffsetX(0);
+      setFitOffsetY(0);
+      return;
     }
-    
-    const frame = requestAnimationFrame(updateLayout);
-    window.addEventListener("resize", updateLayout);
-    
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updateLayout);
-    };
-  }, [fitToScreen, players.length, gameMode, scores]);
+
+    const contentWidth = sheet.offsetWidth;
+    const contentHeight = sheet.offsetHeight;
+
+    const availableWidth = viewport.clientWidth;
+    const availableHeight = viewport.clientHeight;
+
+    if (
+      contentWidth <= 0 ||
+      contentHeight <= 0 ||
+      availableWidth <= 0 ||
+      availableHeight <= 0
+    ) {
+      return;
+    }
+
+    const scaleX = availableWidth / contentWidth;
+    const scaleY = availableHeight / contentHeight;
+
+    const nextScale = Math.min(scaleX, scaleY);
+
+    const scaledWidth = contentWidth * nextScale;
+    const scaledHeight = contentHeight * nextScale;
+
+    const nextOffsetX = Math.max(
+      0,
+      (availableWidth - scaledWidth) / 2
+    );
+
+    const nextOffsetY = Math.max(
+      0,
+      (availableHeight - scaledHeight) / 2
+    );
+
+    setFitScale(nextScale);
+    setFitOffsetX(nextOffsetX);
+    setFitOffsetY(nextOffsetY);
+  }
+
+  const frame = requestAnimationFrame(updateLayout);
+
+  const resizeObserver = new ResizeObserver(() => {
+    requestAnimationFrame(updateLayout);
+  });
+
+  const viewport = viewportRef.current;
+  const sheet = sheetRef.current;
+
+  if (viewport) {
+    resizeObserver.observe(viewport);
+  }
+
+  if (sheet) {
+    resizeObserver.observe(sheet);
+  }
+
+  window.addEventListener("resize", updateLayout);
+  document.addEventListener("fullscreenchange", updateLayout);
+
+  return () => {
+    cancelAnimationFrame(frame);
+    resizeObserver.disconnect();
+    window.removeEventListener("resize", updateLayout);
+    document.removeEventListener("fullscreenchange", updateLayout);
+  };
+}, [fitToScreen, players.length, gameMode]);
   useEffect(() => {
     if (!gameId) return;
     
@@ -829,6 +871,7 @@ if (status === "playing" || status === "finished") {
     useSideLeaderboard={useSideLeaderboard}
     viewportRef={viewportRef}
     sheetRef={sheetRef}
+    fitOffsetY={fitOffsetY}
     fitOffsetX={fitOffsetX}
     fitScale={fitScale}
     players={players}
