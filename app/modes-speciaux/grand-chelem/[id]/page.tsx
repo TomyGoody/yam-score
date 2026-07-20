@@ -925,7 +925,7 @@ return (
           </p>
           
           <h2 className="mt-2 text-2xl font-black">
-          Comment jouer ce set ?
+          Configuration
           </h2>
           <div className="mt-5">
   <p
@@ -942,6 +942,7 @@ return (
       const selected = selectedStartingPlayerId === player.id;
 
       return (
+        
         <button
           key={player.id}
           type="button"
@@ -959,7 +960,16 @@ return (
     })}
   </div>
 </div>
-          <div className="mt-6 grid grid-cols-2 gap-3">
+<p
+    className={[
+      "text-sm mt-4 font-black uppercase tracking-widest",
+      tournament.accentText,
+    ].join(" ")}
+  >
+    Mode de jeu
+  </p>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            
           <ModeButton
   title="Local"
   subtitle="Une personne note tout"
