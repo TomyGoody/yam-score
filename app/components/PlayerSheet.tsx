@@ -3,6 +3,7 @@
 import { Pencil } from "lucide-react";
 import { columns, rows, YamRow } from "../lib/yamRules";
 import React from "react";
+import type { TournamentThemeConfig } from "../lib/tournamentThemes";
 type ScoreValue = number | "X" | null;
 
 type Player = {
@@ -41,6 +42,7 @@ activeColumns,
 currentPlayerId,
 gameFinished,
 lastScoreAnimation,
+tournamentTheme,
 color,
 }: {
   player: Player;
@@ -51,6 +53,7 @@ color,
   getGrandTotal: (playerId: string, columnId: string) => number;
   getPlayerTotal: (playerId: string) => number;
   currentPlayerId: string | null;
+  tournamentTheme?: TournamentThemeConfig | null;
   color: {
   text: string;
   border: string;
@@ -83,8 +86,13 @@ lastScoreAnimation: {
   
  
   return (
-    <div
-  className="shrink-0 rounded-xl  bg-gradient-to-br from-[#F7EFE6] to-[#F1E2D4] p-4 text-[#241812] shadow-2xl"
+   <div
+  className={[
+    "shrink-0 rounded-xl border-2 p-4 shadow-2xl transition-colors",
+    tournamentTheme
+      ? `${tournamentTheme.border} bg-gradient-to-br from-[#F7EFE6] to-[#F1E2D4]`
+      : "border-[#CFAF95] bg-gradient-to-br from-[#F7EFE6] to-[#F1E2D4]",
+  ].join(" ")}
 >
      <div className="relative  text-center">
   <div className="flex items-center justify-center gap-2">
@@ -135,11 +143,23 @@ lastScoreAnimation: {
     )}
   </div>
 
-  <div className="text-3xl font-black text-[#B84332]">
+  <div
+  className={[
+    "text-3xl font-black",
+    tournamentTheme
+      ? tournamentTheme.accentDarkText
+      : "text-[#B84332]",
+  ].join(" ")}
+>
     {getPlayerTotal(player.id)}
   </div>
   {lastScoreAnimation?.playerId === player.id && (
-  <div className="pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black text-[#B84332] animate-score-pop">
+  <div className={[
+  "pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black animate-score-pop",
+  tournamentTheme
+    ? tournamentTheme.accentDarkText
+    : "text-[#B84332]",
+].join(" ")}>
     {lastScoreAnimation.value === "X"
       ? "✕"
       : `+${lastScoreAnimation.value}`}
@@ -148,7 +168,12 @@ lastScoreAnimation: {
   <div className="h-5 mt-0">
   {isCurrentPlayer && !gameFinished && (
     <div
-      className={`text-xs font-black uppercase tracking-wider animate-pulse text-[#B84332]`}
+      className={[
+  "text-xs font-black uppercase tracking-wider animate-pulse",
+  tournamentTheme
+    ? tournamentTheme.accentDarkText
+    : "text-[#B84332]",
+].join(" ")}
     >
       ▶ Ton tour
     </div>

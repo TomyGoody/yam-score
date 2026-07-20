@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import GameScreen from "./components/GameScreen";
 import Leaderboard from "./components/Leaderboard";
 import { getLevelFromTotalXp } from "./lib/levelRules";
+import { getTournamentTheme } from "./lib/tournamentThemes";
 import {
   achievementDefinitions,
   BADGE_XP,
@@ -20,8 +21,18 @@ import {
 import PlayerSheet from "./components/PlayerSheet";
 import AuthButton from "./components/AuthButton";
 import { QRCodeCanvas } from "qrcode.react";
+import LoadingScreen from "./components/LoadingScreen";
 
 type ScoreValue = number | "X" | null;
+type CompetitionLocalSet = {
+  competitionId: string;
+  gameId: string;
+  roundNumber: number;
+  theme: "australian_open" | "roland_garros" | "wimbledon" | "us_open";
+  tournamentName: string;
+  player1SetsWon: number;
+  player2SetsWon: number;
+};
 type Player = {
   id: string;
   name: string;
@@ -85,9 +96,16 @@ export default function Home() {
   }
   >
   >({});
-  const [screen, setScreen] = useState<"home" | "setup" | "game">("home");
+  const [screen, setScreen] = useState<
+  "landing" | "home" | "setup" | "game"
+  >("landing");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [associateProfile, setAssociateProfile] = useState(true);
+  const [competitionLocalSet, setCompetitionLocalSet] =
+  useState<CompetitionLocalSet | null>(null);
+  
+  const [isLoadingCompetitionSet, setIsLoadingCompetitionSet] =
+  useState(false);
   const router = useRouter();
   const [playerCount, setPlayerCount] = useState(2);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -96,21 +114,21 @@ export default function Home() {
   const [showNewGameWarning, setShowNewGameWarning] = useState(false);
   const [xpResultsByPlayer, setXpResultsByPlayer] = useState<
   Record<
-    string,
-    {
-      xpGain: number;
-      oldLevel: number;
-      newLevel: number;
-      baseXp: number;
-      badgeXp: number;
-      badges: {
-        label: string;
-        milestone: number;
-        xp: number;
-      }[];
-    }
+  string,
+  {
+    xpGain: number;
+    oldLevel: number;
+    newLevel: number;
+    baseXp: number;
+    badgeXp: number;
+    badges: {
+      label: string;
+      milestone: number;
+      xp: number;
+    }[];
+  }
   >
->({});
+  >({});
   const [savedGameInfo, setSavedGameInfo] = useState<{
     playerCount: number;
     mode: string;
@@ -129,6 +147,10 @@ export default function Home() {
     rowId: string;
     value: number | "X";
   } | null>(null);
+  const [competitionFinishResult, setCompetitionFinishResult] =
+  useState<{
+    competition_finished: boolean;
+  } | null>(null);
   const [salonCode, setSalonCode] = useState<string | null>(null);
   const [isCreatingSalon, setIsCreatingSalon] = useState(false);
   const [salonGameId, setSalonGameId] = useState<string | null>(null);
@@ -143,6 +165,7 @@ export default function Home() {
   const [hasSavedGame, setHasSavedGame] = useState(false);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  const finishLocalGameStartedRef = useRef(false);
   const [currentLocalGameId, setCurrentLocalGameId] = useState<string | null>(null);
   const scoreOptions = selectedCell ? getScoreOptions(selectedCell.rowId) : [];
   const useSideLeaderboard = players.length <= 3;
@@ -188,6 +211,179 @@ useEffect(() => {
   });
   
   return () => subscription.unsubscribe();
+}, []);
+useEffect(() => {
+  async function loadCompetitionLocalSet() {
+    const searchParams = new URLSearchParams(window.location.search);
+    
+    const competitionId = searchParams.get("competitionId");
+    const gameId = searchParams.get("gameId");
+    
+    if (!competitionId || !gameId) return;
+    
+    setIsLoadingCompetitionSet(true);
+    
+    const { data: game, error: gameError } = await supabase
+    .from("local_games")
+    .select(
+      `
+        id,
+        mode,
+        player_count,
+        status,
+        competition_id,
+        competition_round_number
+        `
+    )
+    .eq("id", gameId)
+    .eq("competition_id", competitionId)
+    .single();
+    
+    if (gameError || !game) {
+      console.error("Erreur chargement set local", {
+        message: gameError?.message,
+        details: gameError?.details,
+        hint: gameError?.hint,
+        code: gameError?.code,
+      });
+      
+      alert("Impossible de charger ce set de compétition.");
+      setIsLoadingCompetitionSet(false);
+      return;
+    }
+    
+    const { data: gamePlayers, error: playersError } = await supabase
+    .from("local_game_players")
+    .select(
+      `
+    player_key,
+    display_name,
+    profile_id,
+    player_order,
+    competition_player_id
+  `
+    )
+    .eq("game_id", gameId)
+    .order("player_order", { ascending: true });
+    
+    if (playersError || !gamePlayers || gamePlayers.length !== 2) {
+      console.error("Erreur chargement joueurs du set", playersError);
+      alert("Impossible de charger les joueurs de ce set.");
+      setIsLoadingCompetitionSet(false);
+      return;
+    }
+    const { data: competition, error: competitionError } =
+    await supabase
+    .from("competitions")
+    .select("theme")
+    .eq("id", competitionId)
+    .single();
+    
+    if (competitionError || !competition) {
+      console.error("Erreur chargement compétition", {
+        message: competitionError?.message,
+        details: competitionError?.details,
+        hint: competitionError?.hint,
+        code: competitionError?.code,
+      });
+      
+      alert("Impossible de charger les informations de la compétition.");
+      setIsLoadingCompetitionSet(false);
+      return;
+    }
+    
+    const {
+      data: competitionPlayers,
+      error: competitionPlayersError,
+    } = await supabase
+    .from("competition_players")
+    .select("id, player_order, sets_won")
+    .eq("competition_id", competitionId)
+    .order("player_order", { ascending: true });
+    
+    if (
+      competitionPlayersError ||
+      !competitionPlayers ||
+      competitionPlayers.length !== 2
+    ) {
+      console.error(
+        "Erreur chargement score de la compétition",
+        competitionPlayersError
+      );
+      
+      alert("Impossible de charger le score de la compétition.");
+      setIsLoadingCompetitionSet(false);
+      return;
+    }
+    const { data: savedScores, error: scoresError } = await supabase
+    .from("local_game_scores")
+    .select("player_key, column_id, row_id, value")
+    .eq("game_id", gameId);
+    
+    if (scoresError) {
+      console.error("Erreur chargement scores du set", scoresError);
+      setIsLoadingCompetitionSet(false);
+      return;
+    }
+    
+    const loadedPlayers: Player[] = gamePlayers.map((player) => ({
+      id: player.player_key,
+      name: player.display_name,
+      playerOrder: player.player_order,
+      linkedUserId: player.profile_id,
+    }));
+    
+    const loadedScores: Scores = {};
+    
+    for (const score of savedScores ?? []) {
+      const value: ScoreValue =
+      score.value === "X" ? "X" : Number(score.value);
+      
+      loadedScores[score.player_key] = {
+        ...loadedScores[score.player_key],
+        [score.column_id]: {
+          ...loadedScores[score.player_key]?.[score.column_id],
+          [score.row_id as YamRow]: value,
+        },
+      };
+    }
+    const setPlayer1CompetitionId =
+    gamePlayers.find((player) => player.player_order === 1)
+    ?.competition_player_id ?? null;
+    
+    const setPlayer2CompetitionId =
+    gamePlayers.find((player) => player.player_order === 2)
+    ?.competition_player_id ?? null;
+    
+    const setPlayer1Competition = competitionPlayers.find(
+      (player) => player.id === setPlayer1CompetitionId
+    );
+    
+    const setPlayer2Competition = competitionPlayers.find(
+      (player) => player.id === setPlayer2CompetitionId
+    );
+    setCompetitionLocalSet({
+      competitionId,
+      gameId,
+      roundNumber: game.competition_round_number,
+      theme: competition.theme,
+      tournamentName: getTournamentName(competition.theme),
+      player1SetsWon: setPlayer1Competition?.sets_won ?? 0,
+      player2SetsWon: setPlayer2Competition?.sets_won ?? 0,
+    });
+    setCurrentLocalGameId(gameId);
+    setPartyMode("local");
+    setPlayerCount(2);
+    setGameMode(game.mode);
+    setPlayers(loadedPlayers);
+    setScores(loadedScores);
+    setFinishedGameSaved(false);
+    setHasSavedGame(false);
+    setScreen("game");
+    setIsLoadingCompetitionSet(false);
+  }
+  
+  void loadCompetitionLocalSet();
 }, []);
 useEffect(() => {
   updateSavedGameInfo();
@@ -345,22 +541,22 @@ useEffect(() => {
   function updateLayout() {
     const viewport = viewportRef.current;
     const sheet = sheetRef.current;
-
+    
     if (!viewport || !sheet) return;
-
+    
     if (!fitToScreen) {
       setFitScale(1);
       setFitOffsetX(0);
       setFitOffsetY(0);
       return;
     }
-
+    
     const contentWidth = sheet.offsetWidth;
     const contentHeight = sheet.offsetHeight;
-
+    
     const availableWidth = viewport.clientWidth;
     const availableHeight = viewport.clientHeight;
-
+    
     if (
       contentWidth <= 0 ||
       contentHeight <= 0 ||
@@ -369,51 +565,51 @@ useEffect(() => {
     ) {
       return;
     }
-
+    
     const scaleX = availableWidth / contentWidth;
     const scaleY = availableHeight / contentHeight;
-
+    
     // Utilise au maximum l'espace disponible sans jamais dépasser.
     const nextScale = Math.min(scaleX, scaleY);
-
+    
     const scaledWidth = contentWidth * nextScale;
     const scaledHeight = contentHeight * nextScale;
-
+    
     const nextOffsetX = Math.max(
       0,
       (availableWidth - scaledWidth) / 2
     );
-
+    
     const nextOffsetY = Math.max(
       0,
       (availableHeight - scaledHeight) / 2
     );
-
+    
     setFitScale(nextScale);
     setFitOffsetX(nextOffsetX);
     setFitOffsetY(nextOffsetY);
   }
-
+  
   const frame = requestAnimationFrame(updateLayout);
-
+  
   const resizeObserver = new ResizeObserver(() => {
     requestAnimationFrame(updateLayout);
   });
-
+  
   const viewport = viewportRef.current;
   const sheet = sheetRef.current;
-
+  
   if (viewport) {
     resizeObserver.observe(viewport);
   }
-
+  
   if (sheet) {
     resizeObserver.observe(sheet);
   }
-
+  
   window.addEventListener("resize", updateLayout);
   document.addEventListener("fullscreenchange", updateLayout);
-
+  
   return () => {
     cancelAnimationFrame(frame);
     resizeObserver.disconnect();
@@ -424,6 +620,12 @@ useEffect(() => {
 useEffect(() => {
   if (players.length === 0) return;
   
+  // Les sets de compétition sont déjà sauvegardés dans Supabase.
+  if (competitionLocalSet) {
+    localStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+  
   localStorage.setItem(
     STORAGE_KEY,
     JSON.stringify({
@@ -432,7 +634,7 @@ useEffect(() => {
       gameMode,
     })
   );
-}, [players, scores, gameMode]);
+}, [players, scores, gameMode, competitionLocalSet]);
 useEffect(() => {
   if (!linkToken) return;
   
@@ -536,6 +738,27 @@ async function loadSalonPlayers() {
   
   setSalonPlayers(data ?? []);
 }
+function getTournamentName(
+  theme:
+  | "australian_open"
+  | "roland_garros"
+  | "wimbledon"
+  | "us_open"
+) {
+  switch (theme) {
+    case "australian_open":
+    return "Open d’Australie";
+    
+    case "roland_garros":
+    return "Roland-Garros";
+    
+    case "wimbledon":
+    return "Wimbledon";
+    
+    case "us_open":
+    return "US Open";
+  }
+}
 useEffect(() => {
   if (!salonGameId) return;
   
@@ -605,8 +828,8 @@ function newGameFromVictory() {
   localStorage.removeItem(STORAGE_KEY);
   
   setPlayers([]);
-setSetupPlayerNames([]);
-setLinkedProfiles({});
+  setSetupPlayerNames([]);
+  setLinkedProfiles({});
   setScores({});
   setSelectedCell(null);
   setScoreInput("");
@@ -689,7 +912,7 @@ function getBaseXpGain(playerId: string, rank: number) {
     countFigure(playerId, "straight") * FIGURE_XP.straight +
     countSuccessfulYams(playerId) * FIGURE_XP.yam +
     activeColumns.filter((column) => getBonus(playerId, column.id) > 0).length *
-      FIGURE_XP.bonus
+    FIGURE_XP.bonus
   );
 }
 function countFigure(playerId: string, rowId: YamRow) {
@@ -731,6 +954,7 @@ function startGame() {
   setFitScale(1);
   setScreen("game");
   setFinishedGameSaved(false);
+  finishLocalGameStartedRef.current = false;
 }
 function handleStartGame() {
   if (partyMode === "salon") {
@@ -752,19 +976,39 @@ function quitGame() {
   setShowQuitModal(true);
 }
 function confirmQuitGame() {
+  if (competitionLocalSet) {
+    const competitionId = competitionLocalSet.competitionId;
+    
+    // Le set reste "playing" dans Supabase et pourra être repris.
+    localStorage.removeItem(STORAGE_KEY);
+    
+    setShowQuitModal(false);
+    setSelectedCell(null);
+    setScoreInput("");
+    setFitToScreen(false);
+    setFitScale(1);
+    setHasSavedGame(false);
+    
+    router.push(
+      `/modes-speciaux/grand-chelem/${competitionId}`
+    );
+    
+    return;
+  }
+  
   setPlayers([]);
   setSetupPlayerNames([]);
   setLinkedProfiles({});
-
+  
   setSelectedCell(null);
   setScoreInput("");
   setFitToScreen(false);
   setFitScale(1);
-
+  
   setShowQuitModal(false);
   setHasSavedGame(true);
   setScreen("home");
-
+  
   setTimeout(updateSavedGameInfo, 0);
 }
 function toggleFullscreen() {
@@ -802,30 +1046,30 @@ function isValidScoreForRow(rowId: YamRow, value: number) {
 }
 function fillRandomGame() {
   const nextScores: Scores = { ...scores };
-
+  
   for (const player of players) {
     nextScores[player.id] = {
       ...(nextScores[player.id] ?? {}),
     };
-
+    
     for (const column of activeColumns) {
       nextScores[player.id][column.id] = {
         ...(nextScores[player.id][column.id] ?? {}),
       };
-
+      
       for (const row of rows) {
         const options = getScoreOptions(row.id);
-
+        
         const value =
-          Math.random() < 0.15
-            ? "X"
-            : options[Math.floor(Math.random() * options.length)];
-
+        Math.random() < 0.15
+        ? "X"
+        : options[Math.floor(Math.random() * options.length)];
+        
         nextScores[player.id][column.id][row.id] = value;
       }
     }
   }
-
+  
   setScores(nextScores);
 }
 async function saveScore(value: number | "X") {
@@ -1056,30 +1300,30 @@ const gameFinished = isGameFinished();
 const [finishedGameSaved, setFinishedGameSaved] = useState(false);
 useEffect(() => {
   async function updateProfileStatsAfterGame({
-  gameId,
-  profileId,
-  playerTotal,
-  playerRank,
-  yamsCount,
-  playerCount,
-  mode,
-  source,
-  playerId,
-}: {
-  gameId: string;
-  profileId: string;
-  playerTotal: number;
-  playerRank: number;
-  yamsCount: number;
-  playerCount: number;
-  mode: "3cols" | "6cols";
-  source: "local" | "salon";
-  playerId: string;
-}) {
+    gameId,
+    profileId,
+    playerTotal,
+    playerRank,
+    yamsCount,
+    playerCount,
+    mode,
+    source,
+    playerId,
+  }: {
+    gameId: string;
+    profileId: string;
+    playerTotal: number;
+    playerRank: number;
+    yamsCount: number;
+    playerCount: number;
+    mode: "3cols" | "6cols";
+    source: "local" | "salon";
+    playerId: string;
+  }) {
     const is3Cols = mode === "3cols";
     const currentPlayerIdForStats = playerId;
     const { error } = await supabase.rpc("upsert_profile_stats_for_local_game_player", {
-  p_game_id: gameId,
+      p_game_id: gameId,
       p_profile_id: profileId,
       p_games_played_3: is3Cols ? 1 : 0,
       p_games_played_6: is3Cols ? 0 : 1,
@@ -1122,63 +1366,151 @@ useEffect(() => {
   }
   async function finishLocalGame() {
     if (!gameFinished) return;
-    if (finishedGameSaved) return;
+    if (finishLocalGameStartedRef.current) return;
     
-    setFinishedGameSaved(true);
+    // Verrou immédiat : contrairement à setState, la ref change tout de suite.
+    finishLocalGameStartedRef.current = true;
     
-    localStorage.removeItem(STORAGE_KEY);
-    setHasSavedGame(false);
-    setSavedGameInfo(null);
-    const linkedPlayers = players.filter((player) => player.linkedUserId);
+    console.log("🏁 finishLocalGame réellement lancée");
     
-    // Aucun profil associé = rien en base
-    if (linkedPlayers.length === 0) return;
+    // La partie est terminée : on affiche immédiatement la modale.
+    setShowVictoryModal(true);
     
-    const ownerId = linkedPlayers[0].linkedUserId;
+    const linkedPlayers = players.filter(
+      (player) => Boolean(player.linkedUserId)
+    );
     
-    const { data: gameData, error: gameError } = await supabase
-    .from("local_games")
-    .insert({
-      mode: gameMode,
-      player_count: playerCount,
-      status: "finished",
-      created_by: ownerId,
-      linked_profile_id: ownerId,
-      finished_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+    console.log("👥 Profils liés :", linkedPlayers);
     
-    if (gameError) {
-      console.error("Erreur création partie terminée", gameError);
+    // Partie sans profil : modale uniquement, aucune écriture en base.
+    if (linkedPlayers.length === 0) {
+      setFinishedGameSaved(true);
+      localStorage.removeItem(STORAGE_KEY);
+      setHasSavedGame(false);
+      setSavedGameInfo(null);
       return;
     }
     
-    const createdGameId = gameData.id;
-    setCurrentLocalGameId(createdGameId);
+    const ownerId = linkedPlayers[0].linkedUserId;
+    
+    if (!ownerId) {
+      console.error("Aucun propriétaire trouvé pour la partie");
+      finishLocalGameStartedRef.current = false;
+      return;
+    }
     
     const leaderboard = getLeaderboard();
     
-    const { error: playersError } = await supabase
-    .from("local_game_players")
-    .insert(
-      leaderboard.map((player) => ({
-        game_id: createdGameId,
-        player_key: player.id,
-        display_name: player.name,
-        profile_id: player.linkedUserId,
-        final_score: player.total,
-        final_rank: player.rank,
-        yams_count: countSuccessfulYams(player.id),
-        player_order:
-        Number(player.id.replace("player-", "")) || player.rank,
-        
-      }))
-    );
+    let createdGameId: string;
     
-    if (playersError) {
-      console.error("Erreur sauvegarde joueurs finaux", playersError);
-      return;
+    if (competitionLocalSet && currentLocalGameId) {
+      createdGameId = currentLocalGameId;
+      
+      console.log("🏆 Finalisation du set local de compétition", {
+        createdGameId,
+        competitionLocalSet,
+      });
+      
+      const { error: gameError } = await supabase
+      .from("local_games")
+      .update({
+        status: "finished",
+        finished_at: new Date().toISOString(),
+      })
+      .eq("id", createdGameId)
+      .eq("competition_id", competitionLocalSet.competitionId);
+      
+      if (gameError) {
+        console.error("Erreur finalisation du set local", {
+          message: gameError.message,
+          details: gameError.details,
+          hint: gameError.hint,
+          code: gameError.code,
+        });
+        
+        setFinishedGameSaved(false);
+        return;
+      }
+      
+      const { error: playersError } = await supabase
+      .from("local_game_players")
+      .upsert(
+        leaderboard.map((player) => ({
+          game_id: createdGameId,
+          player_key: player.id,
+          display_name: player.name,
+          profile_id: player.linkedUserId,
+          final_score: player.total,
+          final_rank: player.rank,
+          yams_count: countSuccessfulYams(player.id),
+          player_order:
+          Number(player.id.replace("player-", "")) || player.rank,
+        })),
+        {
+          onConflict: "game_id,player_key",
+        }
+      );
+      
+      if (playersError) {
+        console.error("Erreur mise à jour joueurs du set", {
+          message: playersError.message,
+          details: playersError.details,
+          hint: playersError.hint,
+          code: playersError.code,
+        });
+        
+        setFinishedGameSaved(false);
+        return;
+      }
+    } else {
+      console.log("📝 Création de la partie locale classique...");
+      
+      const { data: gameData, error: gameError } = await supabase
+      .from("local_games")
+      .insert({
+        mode: gameMode,
+        player_count: playerCount,
+        status: "finished",
+        created_by: ownerId,
+        linked_profile_id: ownerId,
+        source: "local",
+        finished_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+      
+      if (gameError || !gameData) {
+        console.error("Erreur création partie terminée", gameError);
+        
+        // Autorise une nouvelle tentative, par exemple après un rechargement.
+        finishLocalGameStartedRef.current = false;
+        return;
+      }
+      
+      createdGameId = gameData.id;
+      setCurrentLocalGameId(createdGameId);
+      
+      const { error: playersError } = await supabase
+      .from("local_game_players")
+      .insert(
+        leaderboard.map((player) => ({
+          game_id: createdGameId,
+          player_key: player.id,
+          display_name: player.name,
+          profile_id: player.linkedUserId,
+          final_score: player.total,
+          final_rank: player.rank,
+          yams_count: countSuccessfulYams(player.id),
+          player_order:
+          Number(player.id.replace("player-", "")) || player.rank,
+        }))
+      );
+      
+      if (playersError) {
+        console.error("Erreur sauvegarde joueurs finaux", playersError);
+        finishLocalGameStartedRef.current = false;
+        return;
+      }
     }
     
     const scoreRows = players.flatMap((player) =>
@@ -1204,7 +1536,9 @@ useEffect(() => {
 if (scoreRows.length > 0) {
   const { error: scoresError } = await supabase
   .from("local_game_scores")
-  .insert(scoreRows);
+  .upsert(scoreRows, {
+    onConflict: "game_id,player_key,column_id,row_id",
+  });
   
   if (scoresError) {
     console.error("Erreur sauvegarde scores finaux", scoresError);
@@ -1238,20 +1572,20 @@ for (const player of leaderboard) {
     gameId: createdGameId,
   });
   const { error: winStreakError } = await supabase.rpc("update_win_streak", {
-  p_game_id: createdGameId,
-  p_profile_id: player.linkedUserId,
-  p_is_win: player.rank === 1,
-  p_player_count: playerCount,
-});
-
-if (winStreakError) {
-  console.error("Erreur update win streak", {
-    message: winStreakError.message,
-    details: winStreakError.details,
-    hint: winStreakError.hint,
-    code: winStreakError.code,
+    p_game_id: createdGameId,
+    p_profile_id: player.linkedUserId,
+    p_is_win: player.rank === 1,
+    p_player_count: playerCount,
   });
-}
+  
+  if (winStreakError) {
+    console.error("Erreur update win streak", {
+      message: winStreakError.message,
+      details: winStreakError.details,
+      hint: winStreakError.hint,
+      code: winStreakError.code,
+    });
+  }
   const { data: statsAfter } = await supabase
   .from("profile_stats")
   .select("*")
@@ -1259,8 +1593,8 @@ if (winStreakError) {
   .maybeSingle();
   
   const potentialBadges = getNewUnlockedBadges(statsBefore, statsAfter);
-
-const { data: claimedBadges, error: claimBadgesError } =
+  
+  const { data: claimedBadges, error: claimBadgesError } =
   await supabase.rpc("claim_profile_badges_for_local_game_player", {
     p_game_id: createdGameId,
     p_profile_id: player.linkedUserId,
@@ -1285,9 +1619,9 @@ const awardedBadges: {
   const definition = potentialBadges.find(
     (item) =>
       item.id === badge.claimed_badge_id &&
-      item.milestone === badge.claimed_milestone
+    item.milestone === badge.claimed_milestone
   );
-
+  
   return {
     label: definition?.label ?? badge.claimed_badge_id,
     milestone: badge.claimed_milestone,
@@ -1315,47 +1649,92 @@ if (xpError) {
   });
 } else {
   const result = Array.isArray(xpResult) ? xpResult[0] : xpResult;
-
-if (result) {
-  const totalXpAfter = result.total_xp;
-const totalXpBefore = totalXpAfter - result.xp_gained;
-
-setXpResultsByPlayer((current) => ({
-  ...current,
-  [player.id]: {
-    xpGain: result.xp_gained,
-    oldLevel: getLevelFromTotalXp(totalXpBefore),
-    newLevel: getLevelFromTotalXp(totalXpAfter),
-    baseXp,
-    badgeXp,
-    badges: awardedBadges,
-  },
-}));
-}
+  
+  if (result) {
+    const totalXpAfter = result.total_xp;
+    const totalXpBefore = totalXpAfter - result.xp_gained;
+    
+    setXpResultsByPlayer((current) => ({
+      ...current,
+      [player.id]: {
+        xpGain: result.xp_gained,
+        oldLevel: getLevelFromTotalXp(totalXpBefore),
+        newLevel: getLevelFromTotalXp(totalXpAfter),
+        baseXp,
+        badgeXp,
+        badges: awardedBadges,
+      },
+    }));
+  }
 }
 console.log("XP total gagné", {
   baseXp,
   badgeXp,
   totalXpGain,
 });
-  
+
 }
-setShowVictoryModal(true);
+if (competitionLocalSet) {
+  const { data: competitionResult, error: competitionError } =
+  await supabase.rpc("finish_competition_set", {
+    p_competition_id: competitionLocalSet.competitionId,
+    p_game_id: createdGameId,
+    p_play_mode: "local",
+  });
+  
+  if (competitionError) {
+    console.error("Erreur validation du set de compétition", {
+      message: competitionError.message,
+      details: competitionError.details,
+      hint: competitionError.hint,
+      code: competitionError.code,
+    });
+    
+    setFinishedGameSaved(false);
+    return;
+  }
+  const result = competitionResult as {
+    round_number: number;
+    winner_player_key: string | null;
+    winner_player_order: number | null;
+    winner_sets: number;
+    competition_finished: boolean;
+  };
+  setCompetitionFinishResult({
+    competition_finished: Boolean(result.competition_finished),
+  });
+  console.log("Set de compétition validé", competitionResult);
+}
+console.log("✅ Partie locale complètement sauvegardée");
+
+setFinishedGameSaved(true);
+
+localStorage.removeItem(STORAGE_KEY);
+setHasSavedGame(false);
+setSavedGameInfo(null);
 }
 
 finishLocalGame();
 }, [gameFinished]);
 
-
+if (isLoadingCompetitionSet) {
+  return <LoadingScreen />;
+}
 return (
   <main
   className={
     screen === "game"
-      ? "h-dvh overflow-hidden bg-black text-white"
-      : "min-h-dvh overflow-y-auto bg-black text-white"
+    ? "h-dvh overflow-hidden bg-black text-white"
+    : "min-h-dvh overflow-y-auto bg-black text-white"
   }
->
-  
+  >
+  {screen === "landing" && (
+    <HomeMenu
+    onQuickGame={() => setScreen("home")}
+    onSpecialModes={() => router.push("/modes-speciaux")}
+    onRules={() => router.push("/regles")}
+    />
+  )}
   {screen === "home" && (
     <StartScreen
     playerCount={playerCount}
@@ -1370,6 +1749,7 @@ return (
     currentUserId={currentUserId}
     associateProfile={associateProfile}
     setAssociateProfile={setAssociateProfile}
+    onBack={() => setScreen("landing")}
     />
   )}
   
@@ -1382,7 +1762,7 @@ return (
     setSetupPlayerNames={setSetupPlayerNames}
     linkedProfiles={linkedProfiles}
     setLinkedProfiles={setLinkedProfiles}
-    onBack={() => setScreen("home")}
+    onBack={() => setScreen("landing")}
     onStart={startGame}
     currentUsername={currentUsername}
     linkUrl={linkUrl}
@@ -1405,7 +1785,17 @@ return (
     viewportRef={viewportRef}
     sheetRef={sheetRef}
     fitOffsetX={fitOffsetX}
+    quitLabel={competitionLocalSet ? "Quitter le set" : "Quitter"}
     devFillRandomGame={fillRandomGame}
+    competitionHeader={competitionLocalSet}
+    onBackToCompetition={
+      competitionLocalSet
+      ? () =>
+        router.push(
+        `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}`
+      )
+      : undefined
+    }
     fitScale={fitScale}
     players={players}
     PlayerSheetComponent={PlayerSheet}
@@ -1436,7 +1826,7 @@ return (
       currentPlayerId,
       gameFinished,
     }}
-    playerColors={PLAYER_COLORS}
+    
     />
   )}
   
@@ -1454,10 +1844,31 @@ return (
   )}
   {showVictoryModal && gameFinished && (
     <VictoryModal
-  players={getLeaderboard()}
-  xpResults={xpResultsByPlayer}
-  onBackHome={newGameFromVictory}
-/>
+    players={getLeaderboard()}
+    onViewGrid={() => setShowVictoryModal(false)}
+    xpResults={xpResultsByPlayer}
+    tournamentTheme={
+      competitionLocalSet
+      ? getTournamentTheme(competitionLocalSet.theme)
+      : null
+    }
+    onBackHome={
+      competitionLocalSet
+      ? () => {
+        localStorage.removeItem(STORAGE_KEY);
+        
+        const victorySuffix =
+        competitionFinishResult?.competition_finished
+        ? "?tournamentVictory=1"
+        : "";
+        
+        router.push(
+          `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}${victorySuffix}`
+        );
+      }
+      : newGameFromVictory
+    }
+    />
   )}
   {showQuitModal && (
     <QuitModal
@@ -1633,6 +2044,7 @@ function StartScreen({
   resumeGame,
   partyMode,
   setPartyMode,
+  onBack,
 }: {
   playerCount: number;
   setPlayerCount: (count: number) => void;
@@ -1646,12 +2058,12 @@ function StartScreen({
   currentUserId: string | null;
   associateProfile: boolean;
   setAssociateProfile: (value: boolean) => void;
+  onBack: () => void;
 }) {
   const router = useRouter();
   return (
-    <section className="relative flex min-h-dvh items-center justify-center overflow-y-auto bg-black px-4 py-8 text-white">
-    <AuthButton />
     
+    <section className="relative flex min-h-dvh items-center justify-center overflow-y-auto bg-black px-4 py-8 text-white">
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
     <Image
     src="/favicon.png"
@@ -1661,8 +2073,19 @@ function StartScreen({
     className="select-none rotate-[-12deg]"
     />
     </div>
+    <AuthButton/>
+    <div className="relative z-10 w-full max-w-lg">
+    <div className="mb-5 flex justify-start">
+    <button
+    type="button"
+    onClick={onBack}
+    className="rounded-xl border border-[#9B6A28]/60 bg-black px-4 py-2 text-sm font-black text-white transition hover:bg-[#241A13]"
+    >
+    Accueil
+    </button>
+    </div>
     
-    <div className="relative z-10 w-full max-w-lg rounded-3xl border border-[#9B6A28]/50 bg-black p-5 shadow-2xl">
+    <div className="rounded-3xl border border-[#9B6A28]/50 bg-black p-5 shadow-2xl">
     <div className="mb-5 text-center">
     <div className="text-sm font-black uppercase text-[#C44934]">
     Feuille de score numérique
@@ -1821,6 +2244,9 @@ function StartScreen({
       </button>
     )}
     </div>
+    
+    </div>
+    
     </div>
     </section>
   );
@@ -1931,7 +2357,7 @@ return (
   onClick={onBack}
   className="mb-6 rounded-xl bg-[#241A13] px-4 py-2 font-black text-white hover:bg-[#322217]"
   >
-  ← Retour
+  Retour
   </button>
   
   <div className="text-center">
@@ -2248,4 +2674,161 @@ function ScoreModal({
     </div>
   );
 }
-
+function HomeMenu({
+  onQuickGame,
+  onSpecialModes,
+  onRules,
+}: {
+  onQuickGame: () => void;
+  onSpecialModes: () => void;
+  onRules: () => void;
+}) {
+  return (
+    <section className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-10">
+    
+    <AuthButton />
+    
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.04]">
+    <Image
+    src="/favicon.png"
+    alt=""
+    width={1000}
+    height={1000}
+    priority
+    className="rotate-[-12deg] select-none"
+    />
+    </div>
+    
+    <div className="relative z-10 w-full max-w-5xl">
+    <div className="text-center">
+    <Image
+    src="/favicon.png"
+    alt="YamScore"
+    width={110}
+    height={110}
+    priority
+    className="mx-auto"
+    />
+    
+    <h1 className="mt-4 text-5xl font-black sm:text-7xl">
+    YamScore
+    </h1>
+    
+    <p className="mt-3 text-lg font-bold text-slate-400">
+    Choisis comment tu veux jouer
+    </p>
+    </div>
+    
+    <div className="mt-10 grid gap-5 md:grid-cols-3">
+    <HomeMenuCard
+    icon="🎲"
+    title="Partie rapide"
+    description="Lance une partie classique en local ou en Salon."
+    buttonLabel="Jouer"
+    onClick={onQuickGame}
+    variant="quick"
+    />
+    
+    <HomeMenuCard
+    icon="🏆"
+    title="Modes spéciaux"
+    description="Joue des finales et découvre les formats compétitifs."
+    buttonLabel="Découvrir"
+    onClick={onSpecialModes}
+    variant="special"
+    />
+    
+    <HomeMenuCard
+    icon="📖"
+    title="Règles"
+    description="Consulte les règles, les figures et le fonctionnement des colonnes."
+    buttonLabel="Voir les règles"
+    onClick={onRules}
+    variant="rules"
+    />
+    </div>
+    </div>
+    </section>
+  );
+}
+function HomeMenuCard({
+  icon,
+  title,
+  description,
+  buttonLabel,
+  onClick,
+  variant,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  buttonLabel: string;
+  onClick: () => void;
+  variant: "quick" | "special" | "rules";
+}) {
+  const styles = {
+    quick: {
+      border: "border-[#C44934]/70 hover:border-[#C44934]",
+      icon: "bg-[#C44934]/20",
+      iconText: "text-[#E86650]",
+      button:
+      "bg-[#C44934] text-white group-hover:bg-[#D75A43]",
+      glow: "hover:shadow-[0_18px_60px_rgba(196,73,52,0.18)]",
+    },
+    special: {
+      border: "border-[#9B6A28]/70 hover:border-[#D29A3A]",
+      icon: "bg-[#9B6A28]/20",
+      iconText: "text-[#E6B65D]",
+      button:
+      "bg-[#9B6A28] text-white group-hover:bg-[#B67D2B]",
+      glow: "hover:shadow-[0_18px_60px_rgba(155,106,40,0.18)]",
+    },
+    rules: {
+      border: "border-slate-700 hover:border-slate-400",
+      icon: "bg-slate-700/30",
+      iconText: "text-slate-200",
+      button:
+      "bg-slate-700 text-white group-hover:bg-slate-600",
+      glow: "hover:shadow-[0_18px_60px_rgba(148,163,184,0.12)]",
+    },
+  }[variant];
+  
+  return (
+    <button
+    type="button"
+    onClick={onClick}
+    className={[
+      "group flex min-h-[320px] flex-col rounded-3xl border bg-[#111111] p-6 text-left text-white shadow-2xl transition duration-200",
+      "hover:-translate-y-1 hover:scale-[1.01]",
+      styles.border,
+      styles.glow,
+    ].join(" ")}
+    >
+    <div
+    className={[
+      "flex h-16 w-16 items-center justify-center rounded-2xl text-3xl",
+      styles.icon,
+      styles.iconText,
+    ].join(" ")}
+    >
+    {icon}
+    </div>
+    
+    <h2 className="mt-6 text-2xl font-black">{title}</h2>
+    
+    <p className="mt-3 flex-1 font-bold leading-relaxed text-slate-400">
+    {description}
+    </p>
+    
+    <div
+    className={[
+      "mt-6 flex w-full items-center justify-between rounded-xl px-4 py-3 font-black transition",
+      styles.button,
+    ].join(" ")}
+    >
+    <span>{buttonLabel}</span>
+    <span className="transition group-hover:translate-x-1">→</span>
+    </div>
+    </button>
+  );
+}

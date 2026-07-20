@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../lib/supabase";
 import { columns, rows, getPossibleValues } from "../../../../lib/yamRules";
 import LoadingScreen from "../../../../components/LoadingScreen";
-
+import AuthButton from "../../../../components/AuthButton";
 type GameMode = "6cols" | "3cols";
-
+type AccessStatus =
+  | "checking"
+  | "allowed"
+  | "login_required"
+  | "wrong_profile"
+  | "guest_confirmation";
 export default function PlayerPage() {
   const params = useParams();
+  const router = useRouter();
 const [gameStatus, setGameStatus] = useState<"waiting" | "playing" | "finished">("waiting");
   const code = String(params.code).toUpperCase();
   const order = Number(params.order);
@@ -17,6 +23,24 @@ const [currentPlayerOrder, setCurrentPlayerOrder] = useState(1);
   const [gameId, setGameId] = useState<string | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [playerName, setPlayerName] = useState("");
+  const [isCompetitionSalon, setIsCompetitionSalon] = useState(false);
+
+const [expectedProfileId, setExpectedProfileId] =
+  useState<string | null>(null);
+
+const [connectedUserId, setConnectedUserId] =
+  useState<string | null>(null);
+
+const [connectedProfileName, setConnectedProfileName] =
+  useState<string | null>(null);
+
+const [accessStatus, setAccessStatus] = useState<
+  | "checking"
+  | "allowed"
+  | "login_required"
+  | "wrong_profile"
+  | "guest_confirmation"
+>("checking");
   const [gameMode, setGameMode] = useState<GameMode>("6cols");
   const [message, setMessage] = useState("Chargement...");
 const [finalPlayers, setFinalPlayers] = useState<
@@ -41,47 +65,124 @@ console.log("FINAL PLAYERS", playersData);
   setFinalScores(scoresData ?? []);
 }
   async function loadPlayerSession() {
-    const { data: game, error: gameError } = await supabase
-      .from("yam_games")
-      .select("id, mode, current_player_order, status")
-      .eq("code", code)
-      .single();
+  setAccessStatus("checking");
+  setMessage("Chargement...");
 
-    if (gameError || !game) {
-      setMessage("Salon introuvable.");
-      return;
-    }
+  const { data: game, error: gameError } = await supabase
+    .from("yam_games")
+    .select(
+      `
+      id,
+      mode,
+      current_player_order,
+      status,
+      competition_id
+      `
+    )
+    .eq("code", code)
+    .single();
 
-    setGameId(game.id);
-    console.log("PLAYER GAME ID =", game.id);
-    setGameMode(game.mode);
-	setGameStatus(game.status);
-	setCurrentPlayerOrder(game.current_player_order ?? 1);
-
-    const { data: player, error: playerError } = await supabase
-      .from("yam_players")
-      .select("id, name")
-      .eq("game_id", game.id)
-      .eq("player_order", order)
-      .single();
-
-    if (playerError || !player) {
-      setMessage("Joueur introuvable.");
-      return;
-    }
-
-    setPlayerId(player.id);
-    setPlayerName(player.name);
-    setMessage("");
-	if (game.status === "finished") {
-  loadFinalResults(game.id);
-}
+  if (gameError || !game) {
+    setMessage("Salon introuvable.");
+    return;
   }
+
+  setGameId(game.id);
+  setGameMode(game.mode);
+  setGameStatus(game.status);
+  setCurrentPlayerOrder(game.current_player_order ?? 1);
+  setIsCompetitionSalon(Boolean(game.competition_id));
+
+  const { data: player, error: playerError } = await supabase
+    .from("yam_players")
+    .select("id, name, profile_id")
+    .eq("game_id", game.id)
+    .eq("player_order", order)
+    .single();
+
+  if (playerError || !player) {
+    setMessage("Joueur introuvable.");
+    return;
+  }
+
+  setPlayerId(player.id);
+  setPlayerName(player.name);
+  setExpectedProfileId(player.profile_id ?? null);
+
+  /*
+    Les Salons classiques conservent leur comportement actuel.
+    La vérification concerne uniquement les Salons de compétition.
+  */
+  if (!game.competition_id) {
+    setAccessStatus("allowed");
+    setMessage("");
+
+    if (game.status === "finished") {
+      void loadFinalResults(game.id);
+    }
+
+    return;
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  setConnectedUserId(user?.id ?? null);
+
+  /*
+    Place associée à un profil.
+  */
+  if (player.profile_id) {
+    if (!user) {
+      setAccessStatus("login_required");
+      setMessage("");
+      return;
+    }
+
+    if (user.id !== player.profile_id) {
+      setAccessStatus("wrong_profile");
+      setMessage("");
+      return;
+    }
+
+    setAccessStatus("allowed");
+    setMessage("");
+  } else {
+    /*
+      Place invitée.
+      Sans compte connecté : accès direct.
+      Avec un compte connecté : confirmation avant de continuer.
+    */
+    if (user) {
+      setAccessStatus("guest_confirmation");
+      setMessage("");
+      return;
+    }
+
+    setAccessStatus("allowed");
+    setMessage("");
+  }
+
+  if (game.status === "finished") {
+    void loadFinalResults(game.id);
+  }
+}
 
   useEffect(() => {
     loadPlayerSession();
   }, []);
-  
+useEffect(() => {
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(() => {
+    void loadPlayerSession();
+  });
+
+  return () => {
+    subscription.unsubscribe();
+  };
+}, [code, order]);  
 useEffect(() => {
   if (!gameId) return;
 
@@ -141,7 +242,120 @@ useEffect(() => {
   if (message === "Chargement...") {
   return <LoadingScreen />;
 }
+if (isCompetitionSalon && accessStatus === "checking") {
+  return <LoadingScreen />;
+}
 
+if (isCompetitionSalon && accessStatus === "login_required") {
+  return (
+    <main className="relative flex min-h-dvh items-center justify-center bg-black px-4 text-white">
+      <div className="w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-7 text-center">
+        <div className="text-5xl">🔒</div>
+
+        <p className="mt-4 text-sm font-black uppercase tracking-widest text-[#C44934]">
+          Feuille réservée
+        </p>
+
+        <h1 className="mt-2 text-3xl font-black">{playerName}</h1>
+
+        <p className="mt-4 font-bold text-slate-400">
+          Cette place est associée à un profil YamScore. Connecte-toi avec
+          le compte correspondant pour accéder à la feuille.
+        </p>
+
+        <div className="mt-6 flex justify-center">
+          <AuthButton />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+if (isCompetitionSalon && accessStatus === "wrong_profile") {
+  return (
+    <main className="relative flex min-h-dvh items-center justify-center bg-black px-4 text-white">
+      <div className="w-full max-w-md rounded-3xl border border-red-500/50 bg-black p-7 text-center">
+        <div className="text-5xl">⛔</div>
+
+        <p className="mt-4 text-sm font-black uppercase tracking-widest text-red-400">
+          Mauvais profil
+        </p>
+
+        <h1 className="mt-2 text-3xl font-black">
+          Feuille de {playerName}
+        </h1>
+
+        <p className="mt-4 font-bold text-slate-400">
+          Le compte actuellement connecté ne correspond pas au profil
+          associé à cette place.
+        </p>
+
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            await loadPlayerSession();
+          }}
+          className="mt-6 w-full rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
+        >
+          Se déconnecter et changer de compte
+        </button>
+
+        <button
+          type="button"
+          onClick={() => router.push(`/salon/${code}/access`)}
+          className="mt-3 w-full rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
+        >
+          Retour aux accès
+        </button>
+      </div>
+    </main>
+  );
+}
+
+if (
+  isCompetitionSalon &&
+  accessStatus === "guest_confirmation"
+) {
+  return (
+    <main className="relative flex min-h-dvh items-center justify-center bg-black px-4 text-white">
+      <div className="w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-7 text-center">
+        <div className="text-5xl">👤</div>
+
+        <p className="mt-4 text-sm font-black uppercase tracking-widest text-[#C44934]">
+          Place invitée
+        </p>
+
+        <h1 className="mt-2 text-3xl font-black">{playerName}</h1>
+
+        <p className="mt-4 font-bold text-slate-400">
+          Cette place n’est associée à aucun profil. Les statistiques de ce
+          set ne seront pas attribuées au compte actuellement connecté.
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setAccessStatus("allowed")}
+          className="mt-6 w-full rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
+        >
+          Continuer comme invité
+        </button>
+
+        <button
+          type="button"
+          onClick={async () => {
+            await supabase.auth.signOut();
+            setConnectedUserId(null);
+            setAccessStatus("allowed");
+          }}
+          className="mt-3 w-full rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
+        >
+          Se déconnecter puis continuer
+        </button>
+      </div>
+    </main>
+  );
+}
 if (message) {
   return (
     <main className="min-h-screen flex items-center justify-center bg-black px-4">

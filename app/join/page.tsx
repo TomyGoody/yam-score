@@ -281,6 +281,7 @@ if (gameStatus === "playing" && gameId && playerId) {
   return (
   
     <main className="flex min-h-screen items-center justify-center bg-black px-4 text-white">
+      
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
   <img
     src="/favicon.png"

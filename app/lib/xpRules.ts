@@ -19,7 +19,8 @@ export const BADGE_XP = [100, 250, 500, 1000, 2000, 3500, 5000, 10000];
 export const DEFAULT_MILESTONES = [1, 10, 50, 100, 500, 1000, 5000, 10000];
 export const WIN_STREAK_MILESTONES = [1, 2, 3, 4, 5, 6,7,8];
 export const PERFORMANCE_3COLS_MILESTONES = [700,750,775 ,800, 825, 850,875, 900];
-
+export const UNIQUE_ACHIEVEMENT_MILESTONE = [1];
+export const GRAND_SLAM_WIN_MILESTONES = [1, 3, 5, 10, 25, 50, 100, 250];
 export const PERFORMANCE_6COLS_MILESTONES = [1400, 1500, 1550, 1600, 1650, 1700, 1750, 1800];
 export const EXPLOIT_3COLS_MILESTONES = [1000];
 export const EXPLOIT_WIN_STREAK = [10];
@@ -78,6 +79,42 @@ export const achievementDefinitions = [
   label: "inarrêtable",
   metric: "best_win_streak",
   milestones: EXPLOIT_WIN_STREAK,
+},
+{
+  id: "grand_slam_finals_won",
+  label: "Finales de Grand Chelem remportées",
+  metric: "grand_slam_finals_won",
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  id: "australian_open_wins",
+  label: "Open d’Australie remportés",
+  metric: "australian_open_wins",
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  id: "roland_garros_wins",
+  label: "Roland-Garros remportés",
+  metric: "roland_garros_wins",
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  id: "wimbledon_wins",
+  label: "Wimbledon remportés",
+  metric: "wimbledon_wins",
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  id: "us_open_wins",
+  label: "US Open remportés",
+  metric: "us_open_wins",
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  id: "career_grand_slam",
+  label: "Grand Chelem en carrière",
+  metric: "career_grand_slam",
+  milestones: [1],
 },
 ] as const;
 

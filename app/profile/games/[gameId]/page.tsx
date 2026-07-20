@@ -190,7 +190,7 @@ function countFigure(playerKey: string, rowId: YamRow) {
         onClick={() => router.push("/profile")}
         className="rounded-xl bg-[#241A13] px-4 py-2 text-sm font-black text-white transition hover:bg-[#322217]"
       >
-        ← Retour au profil
+        Retour au profil
       </button>
 
       <div className="text-xs font-black uppercase text-slate-400">
@@ -208,6 +208,7 @@ function countFigure(playerKey: string, rowId: YamRow) {
       viewportRef={viewportRef}
       sheetRef={sheetRef}
       fitOffsetX={0}
+      fitOffsetY={0}
       fitScale={1}
       players={players.map((player) => ({
         id: player.player_key,
@@ -242,13 +243,7 @@ function countFigure(playerKey: string, rowId: YamRow) {
         currentPlayerId: null,
         gameFinished: true,
       }}
-      playerColors={[
-  {
-    text: "text-[#C44934]",
-    border: "border-[#9B6A28]/70",
-    bg: "bg-[#F4E9DC]",
-  },
-]}
+      
     />
   </main>
 );

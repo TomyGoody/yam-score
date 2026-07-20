@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-
+import type { TournamentThemeConfig } from "../lib/tournamentThemes";
 type VictoryPlayer = {
   id: string;
   name: string;
@@ -28,27 +28,60 @@ export default function VictoryModal({
   players,
   xpResults,
   onBackHome,
+  tournamentTheme,
   onViewGrid,
 }: {
   players: VictoryPlayer[];
   xpResults: Record<string, XpResult>;
   onBackHome: () => void;
   onViewGrid?: () => void;
+  tournamentTheme?: TournamentThemeConfig | null;
 }) {
   const [selectedXpPlayerId, setSelectedXpPlayerId] = useState<string | null>(null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-      <div className="w-full max-w-xl rounded-3xl border border-[#9B6A28]/70 bg-black p-8 text-center shadow-2xl">
-        <div className="text-6xl">🏆</div>
+      <div
+  className={[
+    "relative w-full max-w-lg overflow-hidden rounded-3xl border-2 p-6 text-white shadow-2xl",
+    tournamentTheme
+      ? `${tournamentTheme.panelBackground} ${tournamentTheme.border}`
+      : "border-[#9B6A28] bg-black",
+  ].join(" ")}
+>
+ {tournamentTheme && (
+  <div className="pointer-events-none absolute inset-0 opacity-15">
+    <div className="absolute left-1/2 top-0 h-full w-px bg-white" />
+    <div className="absolute left-0 top-1/2 h-px w-full bg-white" />
+    <div className="absolute left-1/2 top-1/2 h-48 w-72 -translate-x-1/2 -translate-y-1/2 border border-white" />
+  </div>
+)}
 
-        <div className="mt-3 text-sm font-black uppercase text-[#C44934]">
-          Partie terminée
-        </div>
+<div className="relative z-10">
+  <div className="text-6xl">
+  {tournamentTheme ? tournamentTheme.icon : "🏆"}
+</div>
 
-        <h2 className="mt-1 text-3xl font-black text-white">
-          Classement final
-        </h2>
+<p
+  className={[
+    "mt-3 text-sm font-black uppercase tracking-[0.3em]",
+    tournamentTheme
+      ? tournamentTheme.accentText
+      : "text-[#C44934]",
+  ].join(" ")}
+>
+  {tournamentTheme ? "Set remporté" : "Partie terminée"}
+</p>
+
+<h2 className="mt-2 text-3xl font-black">
+  {tournamentTheme ? players[0]?.name : "Classement final"}
+</h2>
+
+{tournamentTheme && (
+  <p className="mt-2 text-white/70">
+    Remporte le set de {tournamentTheme.name}
+  </p>
+)}
 
         <div className="mt-6 grid gap-3">
           {players.map((player) => {
@@ -59,11 +92,15 @@ export default function VictoryModal({
               <div
                 key={player.id}
                 className={[
-                  "rounded-2xl px-5 py-4 font-black",
-                  player.rank === 1
-                    ? "bg-[#C44934] text-white"
-                    : "bg-[#F4E9DC] text-black",
-                ].join(" ")}
+  "rounded-2xl border px-5 py-4 font-black",
+  tournamentTheme
+    ? player.rank === 1
+      ? `${tournamentTheme.border} ${tournamentTheme.scoreBackground} ${tournamentTheme.scoreText}`
+      : `${tournamentTheme.border} bg-black/25 text-white`
+    : player.rank === 1
+      ? "border-[#C44934] bg-[#C44934] text-white"
+      : "border-[#D7C4B3] bg-[#F4E9DC] text-black",
+].join(" ")}
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="text-left">
@@ -159,15 +196,30 @@ export default function VictoryModal({
           })}
         </div>
 
-        <div className="mt-6 flex justify-center">
-          <button
-            onClick={onBackHome}
-            className="rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
-          >
-            Retour accueil
-          </button>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+  {onViewGrid && (
+    <button
+      type="button"
+      onClick={onViewGrid}
+      className="rounded-xl bg-[#F4E9DC] px-4 py-3 font-black text-[#241812] transition hover:bg-white"
+    >
+      Voir la grille
+    </button>
+  )}
 
-          
+  <button
+    type="button"
+    onClick={onBackHome}
+    className={[
+      "rounded-xl px-4 py-3 font-black transition",
+      tournamentTheme
+        ? `${tournamentTheme.border} border bg-black/25 text-white hover:bg-black/40`
+        : "bg-[#241A13] text-white hover:bg-[#322217]",
+    ].join(" ")}
+  >
+    {tournamentTheme ? "Retour à la finale" : "Retour accueil"}
+  </button>
+</div>
         </div>
       </div>
     </div>

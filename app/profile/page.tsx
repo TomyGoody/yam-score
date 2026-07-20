@@ -11,12 +11,12 @@ import {
   WIN_STREAK_MILESTONES,
   DEFAULT_MILESTONES,
   EXPLOIT_3COLS_MILESTONES,
-EXPLOIT_6COLS_MILESTONES,
+  EXPLOIT_6COLS_MILESTONES,
   PERFORMANCE_3COLS_MILESTONES,
   PERFORMANCE_6COLS_MILESTONES,
-  EXPLOIT_WIN_STREAK
+  EXPLOIT_WIN_STREAK,
+  GRAND_SLAM_WIN_MILESTONES,
 } from "../lib/xpRules";
-
 import {
   LEVEL_XP,
   getLevelFromTotalXp,
@@ -930,6 +930,26 @@ const levelProgress =
   value: achievementStats?.best_win_streak ?? 0,
   milestones: WIN_STREAK_MILESTONES,
 },
+{
+  value: achievementStats?.grand_slam_finals_won ?? 0,
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  value: achievementStats?.australian_open_wins ?? 0,
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  value: achievementStats?.roland_garros_wins ?? 0,
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  value: achievementStats?.wimbledon_wins ?? 0,
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
+{
+  value: achievementStats?.us_open_wins ?? 0,
+  milestones: GRAND_SLAM_WIN_MILESTONES,
+},
         ];
         
         const unlockedAchievements = achievementItems.reduce(
@@ -958,6 +978,7 @@ const paginatedHistory = sortedHistory.slice(
   (historyPage - 1) * HISTORY_PER_PAGE,
   historyPage * HISTORY_PER_PAGE
 );
+
         return (
           <main className="min-h-screen bg-black px-4 py-8 text-white">
           <div className="mx-auto max-w-6xl">
@@ -965,7 +986,7 @@ const paginatedHistory = sortedHistory.slice(
           onClick={() => router.push("/")}
           className="mb-6 rounded-xl bg-[#241A13] px-4 py-2 font-black text-white hover:bg-[#322217]"
           >
-          ← Retour
+          Retour
           </button>
           
           <section className="rounded-3xl border border-[#9B6A28]/70 bg-black p-6 shadow-2xl">
@@ -1953,6 +1974,43 @@ const paginatedHistory = sortedHistory.slice(
                 milestones={PERFORMANCE_6COLS_MILESTONES}
                 />
                 </AchievementSection>
+
+                <AchievementSection title="🎾 Grand Chelem">
+  <AchievementCard
+    icon="🏆"
+    title="Finales remportées"
+    value={achievementStats?.grand_slam_finals_won ?? 0}
+    milestones={GRAND_SLAM_WIN_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🇦🇺"
+    title="Open d’Australie remportés"
+    value={achievementStats?.australian_open_wins ?? 0}
+    milestones={GRAND_SLAM_WIN_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🟠"
+    title="Roland-Garros remportés"
+    value={achievementStats?.roland_garros_wins ?? 0}
+    milestones={GRAND_SLAM_WIN_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🌿"
+    title="Wimbledon remportés"
+    value={achievementStats?.wimbledon_wins ?? 0}
+    milestones={GRAND_SLAM_WIN_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🇺🇸"
+    title="US Open remportés"
+    value={achievementStats?.us_open_wins ?? 0}
+    milestones={GRAND_SLAM_WIN_MILESTONES}
+  />
+</AchievementSection>
                 <AchievementSection title="🏅 Exploits">
   <AchievementCard
   variant="exploit"
@@ -1975,6 +2033,13 @@ const paginatedHistory = sortedHistory.slice(
   title="Inarrêtable"
   value={achievementStats?.best_win_streak ?? 0}
   milestones={EXPLOIT_WIN_STREAK}
+/>
+<AchievementCard
+  variant="exploit"
+  icon="🌍"
+  title="Grand Chelem en carrière"
+  value={achievementStats?.career_grand_slam ?? 0}
+  milestones={[1]}
 />
 </AchievementSection>
                 </div>
