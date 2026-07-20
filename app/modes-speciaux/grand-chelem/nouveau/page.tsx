@@ -619,7 +619,7 @@ function applyClaimedProfile({
 
           <div className="mt-5 rounded-2xl border border-slate-800 bg-black p-4">
             <p className="text-sm font-bold text-slate-400">
-              Pour la V1, ton profil doit être associé à l’un des deux
+              Ton profil doit être associé à l’un des deux
               participants. Le second joueur peut rester invité.
             </p>
           </div>
