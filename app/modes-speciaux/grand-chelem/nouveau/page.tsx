@@ -23,6 +23,7 @@ type TournamentDefinition = {
   id: TournamentTheme;
   name: string;
   subtitle: string;
+  logo: string;
   icon: string;
   backgroundClass: string;
   borderClass: string;
@@ -36,6 +37,7 @@ const TOURNAMENTS: TournamentDefinition[] = [
     icon: "🇦🇺",
     backgroundClass: "bg-[#1779BA]",
     borderClass: "border-[#65BFEA]",
+    logo: "/australian-open-logo.png",
   },
   {
     id: "roland_garros",
@@ -44,6 +46,7 @@ const TOURNAMENTS: TournamentDefinition[] = [
     icon: "🟠",
     backgroundClass: "bg-[#B85632]",
     borderClass: "border-[#E49369]",
+    logo: "/roland-garros-logo.png",
   },
   {
     id: "wimbledon",
@@ -52,6 +55,7 @@ const TOURNAMENTS: TournamentDefinition[] = [
     icon: "🌿",
     backgroundClass: "bg-[#315B40]",
     borderClass: "border-[#7AA987]",
+    logo: "/wimbledon-logo.png",
   },
   {
     id: "us_open",
@@ -60,6 +64,7 @@ const TOURNAMENTS: TournamentDefinition[] = [
     icon: "🇺🇸",
     backgroundClass: "bg-[#183B73]",
     borderClass: "border-[#668AC5]",
+    logo: "/us-open-logo.png",
   },
 ];
 
@@ -72,9 +77,7 @@ export default function NewGrandSlamPage() {
 
   const [theme, setTheme] = useState<TournamentTheme | null>(null);
   const [columnMode, setColumnMode] = useState<3 | 6>(6);
-  const [firstSetMode, setFirstSetMode] = useState<"local" | "salon">(
-    "local"
-  );
+ 
 
   const [player1Name, setPlayer1Name] = useState("");
   const [player2Name, setPlayer2Name] = useState("");
@@ -412,11 +415,7 @@ function applyClaimedProfile({
       return;
     }
 
-    sessionStorage.setItem(
-      `grand-slam-first-set-mode-${competitionId}`,
-      firstSetMode
-    );
-
+    
     router.push(`/modes-speciaux/grand-chelem/${competitionId}`);
   }
 
@@ -441,7 +440,7 @@ function applyClaimedProfile({
           onClick={() => router.push("/modes-speciaux/grand-chelem")}
           className="rounded-xl border border-[#9B6A28]/60 bg-black px-4 py-2 font-black text-white transition hover:bg-[#241A13]"
         >
-          ← Grand Chelem
+          Grand Chelem
         </button>
 
         <header className="mt-8 text-center">
@@ -497,16 +496,22 @@ function applyClaimedProfile({
 
                   <div className="relative z-10 flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-4xl">{tournament.icon}</div>
+  <Image
+  src={tournament.logo}
+  alt={tournament.name}
+  width={72}
+  height={72}
+  className="h-16 w-auto object-contain drop-shadow-lg"
+/>
 
-                      <h2 className="mt-4 text-xl font-black text-white">
-                        {tournament.name}
-                      </h2>
+  <h2 className="mt-4 text-xl font-black text-white">
+    {tournament.name}
+  </h2>
 
-                      <p className="mt-1 text-sm font-bold text-white/70">
-                        {tournament.subtitle}
-                      </p>
-                    </div>
+  <p className="mt-1 text-sm font-bold text-white/70">
+    {tournament.subtitle}
+  </p>
+</div>
 
                     <div
                       className={[
@@ -532,7 +537,7 @@ function applyClaimedProfile({
             description="Le format de Yam reste identique pendant toute la compétition."
           />
 
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
+          <div className="mt-5">
             <div className="rounded-2xl border border-slate-800 bg-black p-5">
               <p className="text-sm font-black uppercase tracking-widest text-[#C44934]">
                 Mode Yam
@@ -555,32 +560,7 @@ function applyClaimedProfile({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-800 bg-black p-5">
-              <p className="text-sm font-black uppercase tracking-widest text-[#C44934]">
-                Premier set
-              </p>
-
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <ChoiceButton
-                  selected={firstSetMode === "local"}
-                  title="Local"
-                  subtitle="Une personne note tout"
-                  onClick={() => setFirstSetMode("local")}
-                />
-
-                <ChoiceButton
-                  selected={firstSetMode === "salon"}
-                  title="Salon"
-                  subtitle="Chacun sur son téléphone"
-                  onClick={() => setFirstSetMode("salon")}
-                />
-              </div>
-
-              <p className="mt-3 text-xs font-bold text-slate-500">
-                Ce choix concerne uniquement le premier set. Le mode pourra
-                changer pour les suivants.
-              </p>
-            </div>
+            
           </div>
         </section>
 
@@ -648,7 +628,7 @@ function applyClaimedProfile({
             />
           </div>
 
-          <div className="mt-5 grid gap-3 text-sm font-black sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 text-sm font-black sm:grid-cols-2">
             <SummaryValue
               label="Tournoi"
               value={selectedTournament?.name ?? "Non choisi"}
@@ -659,10 +639,7 @@ function applyClaimedProfile({
               value={`${columnMode} colonnes`}
             />
 
-            <SummaryValue
-              label="Premier set"
-              value={firstSetMode === "local" ? "Local" : "Salon"}
-            />
+            
           </div>
 
           {errorMessage && (

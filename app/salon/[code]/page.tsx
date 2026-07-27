@@ -15,11 +15,14 @@ import {
   achievementDefinitions,
   BADGE_XP,
   FIGURE_XP,
+
   getParticipationXp,
   getRankXp,
   getUnlockedMilestoneIndexes,
 } from "@/app/lib/xpRules";
-
+import type {
+  CompetitionHeaderData,
+} from "@/app/lib/competitionTypes";
 type Player = {
   id: string;
   name: string;
@@ -35,18 +38,7 @@ type SelectedCell = {
   columnId: string;
   rowId: YamRow;
 };
-type CompetitionHeaderData = {
-  competitionId: string;
-  roundNumber: number;
-  theme:
-    | "australian_open"
-    | "roland_garros"
-    | "wimbledon"
-    | "us_open";
-  tournamentName: string;
-  player1SetsWon: number;
-  player2SetsWon: number;
-};
+
 const PLAYER_COLORS = [
   {
     text: "text-[#C44934]",
@@ -73,23 +65,24 @@ export default function SalonAdminPage() {
   const [competitionHeader, setCompetitionHeader] =
   useState<CompetitionHeaderData | null>(null);
   const [showFinalModal, setShowFinalModal] = useState(false);
-  const [xpResultsByPlayer, setXpResultsByPlayer] = useState<
+const [xpResultsByPlayer, setXpResultsByPlayer] = useState<
   Record<
-  string,
-  {
-    xpGain: number;
-    oldLevel: number;
-    newLevel: number;
-    baseXp: number;
-    badgeXp: number;
-    badges: {
-      label: string;
-      milestone: number;
-      xp: number;
-    }[];
-  }
+    string,
+    {
+      xpGain: number;
+      oldLevel: number;
+      newLevel: number;
+      baseXp: number;
+      
+      badgeXp: number;
+      badges: {
+        label: string;
+        milestone: number;
+        xp: number;
+      }[];
+    }
   >
-  >({});
+>({});
   const [salonSavedToProfile, setSalonSavedToProfile] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -104,9 +97,18 @@ export default function SalonAdminPage() {
   const [gameId, setGameId] = useState<string | null>(null);
   const [competitionId, setCompetitionId] =
   useState<string | null>(null);
+const [competitionType, setCompetitionType] =
+  useState<"grand_slam_final" | "world_cup" | null>(null);
 
+const [competitionMatchId, setCompetitionMatchId] =
+  useState<string | null>(null);
 const [competitionRoundNumber, setCompetitionRoundNumber] =
   useState<number | null>(null);
+  const [isWorldCupSemiFinal, setIsWorldCupSemiFinal] =
+  useState(false);
+
+const [isWorldCupFinal, setIsWorldCupFinal] =
+  useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerCount, setPlayerCount] = useState(0);
   const [status, setStatus] = useState<"waiting" | "playing" | "finished">("waiting");
@@ -145,12 +147,12 @@ setCompetitionRoundNumber(
 );
   }
   async function loadCompetitionHeader(id: string) {
-  if (!competitionRoundNumber) return;
+  if (!competitionRoundNumber || !gameId) return;
 
   const { data: competition, error: competitionError } =
     await supabase
       .from("competitions")
-      .select("theme")
+      .select("competition_type, theme")
       .eq("id", id)
       .single();
 
@@ -165,6 +167,76 @@ setCompetitionRoundNumber(
     return;
   }
 
+  const type = competition.competition_type as
+    | "grand_slam_final"
+    | "world_cup";
+
+  setCompetitionType(type);
+
+  /*
+    Coupe du Monde :
+    on retrouve le match grâce au game_id du Salon.
+  */
+  if (type === "world_cup") {
+    const { data: match, error: matchError } =
+      await supabase
+        .from("competition_matches")
+        .select("id, next_match_id")
+        .eq("competition_id", id)
+        .eq("game_id", gameId)
+        .maybeSingle();
+
+    if (matchError || !match) {
+      console.error(
+        "Erreur chargement du match de Coupe du Monde",
+        {
+          message: matchError?.message,
+          details: matchError?.details,
+          hint: matchError?.hint,
+          code: matchError?.code,
+        }
+      );
+
+      return;
+    }
+
+    setCompetitionMatchId(match.id);
+setIsWorldCupFinal(match.next_match_id === null);
+
+if (match.next_match_id) {
+  const { data: nextMatch } = await supabase
+    .from("competition_matches")
+    .select("next_match_id")
+    .eq("id", match.next_match_id)
+    .single();
+
+  setIsWorldCupSemiFinal(
+    nextMatch?.next_match_id === null
+  );
+} else {
+  setIsWorldCupSemiFinal(false);
+}
+setCompetitionHeader({
+  competitionId: id,
+  competitionType: "world_cup",
+
+  roundNumber: competitionRoundNumber,
+  roundLabel:
+    `Tour ${competitionRoundNumber} · Match à élimination directe`,
+
+  theme: "world_cup",
+  tournamentName: "Coupe du Monde",
+
+  matchId: match.id,
+});
+
+return;
+  }
+
+  /*
+    Grand Chelem :
+    on garde le fonctionnement actuel.
+  */
   const {
     data: competitionPlayers,
     error: competitionPlayersError,
@@ -188,13 +260,23 @@ setCompetitionRoundNumber(
   }
 
   setCompetitionHeader({
-    competitionId: id,
-    roundNumber: competitionRoundNumber,
-    theme: competition.theme,
-    tournamentName: getTournamentName(competition.theme),
-    player1SetsWon: competitionPlayers[0]?.sets_won ?? 0,
-    player2SetsWon: competitionPlayers[1]?.sets_won ?? 0,
-  });
+  competitionId: id,
+  competitionType: "grand_slam_final",
+
+  roundNumber: competitionRoundNumber,
+  roundLabel: `Finale · Set ${competitionRoundNumber}`,
+
+  theme: competition.theme,
+  tournamentName: getTournamentName(
+    competition.theme
+  ),
+
+  player1SetsWon:
+    competitionPlayers[0]?.sets_won ?? 0,
+
+  player2SetsWon:
+    competitionPlayers[1]?.sets_won ?? 0,
+});
 }
   
   // 2. LOAD PLAYERS
@@ -277,13 +359,23 @@ setCompetitionRoundNumber(
     loadCurrentUser();
   }, []);
   useEffect(() => {
-  if (!competitionId || !competitionRoundNumber) {
+  if (
+    !competitionId ||
+    !competitionRoundNumber ||
+    !gameId
+  ) {
     setCompetitionHeader(null);
+    setCompetitionType(null);
+    setCompetitionMatchId(null);
     return;
   }
 
   void loadCompetitionHeader(competitionId);
-}, [competitionId, competitionRoundNumber]);
+}, [
+  competitionId,
+  competitionRoundNumber,
+  gameId,
+]);
   // INIT
   useEffect(() => {
     loadSalon();
@@ -661,11 +753,33 @@ setCompetitionRoundNumber(
     }
     
     const linkedPlayers = players.filter((player) => player.profile_id);
-    
-    if (linkedPlayers.length === 0) {
-      console.error("Sauvegarde impossible : aucun profil associé");
-      return false;
+
+if (linkedPlayers.length === 0 && !competitionId) {
+  console.error("Sauvegarde impossible : aucun profil associé");
+  return false;
+}
+
+if (linkedPlayers.length === 0 && competitionId) {
+  const leaderboard = getLeaderboard();
+
+  const { error: finalScoresError } = await supabase.rpc(
+    "set_salon_final_scores",
+    {
+      p_game_id: gameId,
+      p_scores: leaderboard.map((player) => ({
+        player_id: player.id,
+        final_score: player.total,
+      })),
     }
+  );
+
+  if (finalScoresError) {
+    console.error("Erreur scores finaux salon", finalScoresError);
+    return false;
+  }
+
+  return true;
+}
     
     if (!currentUserId) {
       console.error("Sauvegarde impossible : utilisateur hôte non chargé");
@@ -687,6 +801,10 @@ setCompetitionRoundNumber(
 
   competition_id: competitionId,
   competition_round_number: competitionRoundNumber,
+  competition_match_id:
+  competitionType === "world_cup"
+    ? competitionMatchId
+    : null,
 })
     .select("id")
     .single();
@@ -827,6 +945,19 @@ for (const player of leaderboard) {
     p_games_4_players: playerCount === 4 ? 1 : 0,
     p_games_5_players: playerCount === 5 ? 1 : 0,
     p_games_6_players: playerCount === 6 ? 1 : 0,
+    p_world_cup_finals_reached:
+  competitionType === "world_cup" &&
+  isWorldCupSemiFinal &&
+  player.rank === 1
+    ? 1
+    : 0,
+
+p_world_cup_wins:
+  competitionType === "world_cup" &&
+  isWorldCupFinal &&
+  player.rank === 1
+    ? 1
+    : 0,
   });
   if (statsError) {
     console.error(
@@ -909,7 +1040,10 @@ for (const player of leaderboard) {
     {
       p_game_id: localGame.id,
       p_profile_id: originalPlayer.profile_id,
-      p_xp_gain: baseXp + badgeXp,
+      p_xp_gain:
+  baseXp +
+  
+  badgeXp,
     }
   );
   
@@ -925,13 +1059,16 @@ for (const player of leaderboard) {
       setXpResultsByPlayer((current) => ({
         ...current,
         [player.id]: {
-          xpGain: result.xp_gained,
-          oldLevel: getLevelFromTotalXp(totalXpBefore),
-          newLevel: getLevelFromTotalXp(totalXpAfter),
-          baseXp,
-          badgeXp,
-          badges: awardedBadges,
-        },
+  xpGain: result.xp_gained,
+  oldLevel: getLevelFromTotalXp(totalXpBefore),
+  newLevel: getLevelFromTotalXp(totalXpAfter),
+
+  baseXp,
+
+  badgeXp,
+
+  badges: awardedBadges,
+},
       }));
     }
   }
@@ -991,36 +1128,87 @@ useEffect(() => {
         return;
       }
       if (competitionId) {
-  const { data: competitionResult, error: competitionError } =
-    await supabase.rpc("finish_competition_set", {
-      p_competition_id: competitionId,
-      p_game_id: gameId,
-      p_play_mode: "salon",
-    });
+  let competitionResult: unknown = null;
+  let competitionError: {
+    message: string;
+    details?: string | null;
+    hint?: string | null;
+    code?: string | null;
+  } | null = null;
+
+  if (competitionType === "world_cup") {
+    if (!competitionMatchId) {
+      console.error(
+        "Impossible de terminer le match : competitionMatchId absent"
+      );
+
+      setMessage(
+        "La partie est enregistrée, mais le match de Coupe du Monde est introuvable."
+      );
+
+      return;
+    }
+
+    const response = await supabase.rpc(
+      "finish_world_cup_match",
+      {
+        p_competition_id: competitionId,
+        p_match_id: competitionMatchId,
+        p_game_id: gameId,
+        p_play_mode: "salon",
+      }
+    );
+
+    competitionResult = response.data;
+    competitionError = response.error;
+  } else {
+    const response = await supabase.rpc(
+      "finish_competition_set",
+      {
+        p_competition_id: competitionId,
+        p_game_id: gameId,
+        p_play_mode: "salon",
+      }
+    );
+
+    competitionResult = response.data;
+    competitionError = response.error;
+  }
 
   if (competitionError) {
-    console.error("Erreur validation du set Salon", {
-      message: competitionError.message,
-      details: competitionError.details,
-      hint: competitionError.hint,
-      code: competitionError.code,
-    });
+    console.error(
+      "Erreur validation de la compétition Salon",
+      {
+        message: competitionError.message,
+        details: competitionError.details,
+        hint: competitionError.hint,
+        code: competitionError.code,
+      }
+    );
 
     setMessage(
-      "La partie est enregistrée, mais le résultat du set n’a pas pu être ajouté à la finale."
+      competitionType === "world_cup"
+        ? "La partie est enregistrée, mais le résultat n’a pas pu être ajouté à la Coupe du Monde."
+        : "La partie est enregistrée, mais le résultat du set n’a pas pu être ajouté à la finale."
     );
 
     return;
   }
-const result = competitionResult as {
-  competition_finished: boolean;
-};
 
-setCompetitionFinishResult({
-  competition_finished: Boolean(result.competition_finished),
-});
+  const result = competitionResult as {
+    competition_finished: boolean;
+  };
+
+  setCompetitionFinishResult({
+    competition_finished: Boolean(
+      result.competition_finished
+    ),
+  });
+
   console.log(
-    "Set Salon de compétition validé",
+    competitionType === "world_cup"
+      ? "Match de Coupe du Monde validé"
+      : "Set de Grand Chelem validé",
     competitionResult
   );
 }
@@ -1049,6 +1237,8 @@ setCompetitionFinishResult({
   gameFinished,
   salonSavedToProfile,
   competitionId,
+  competitionType,
+  competitionMatchId,
 ]);
 if (status === "playing" || status === "finished") {
   return (
@@ -1067,7 +1257,13 @@ if (status === "playing" || status === "finished") {
     : undefined
 }
     onUndoLastMove={undoLastMove}
-    quitLabel={competitionId ? "Quitter le set" : "Quitter"}
+    quitLabel={
+  competitionId
+    ? competitionType === "world_cup"
+      ? "Quitter le match"
+      : "Quitter le set"
+    : "Quitter"
+}
      onOpenPlayerAccess={
     competitionId
       ? () => router.push(`/salon/${code}/access`)
@@ -1182,12 +1378,24 @@ onBackToCompetition={
     ? getTournamentTheme(competitionHeader.theme)
     : null
 }
+competitionType={competitionType ?? null}
+competitionFinished={
+  competitionFinishResult?.competition_finished ?? false
+}
       onBackHome={() => {
   if (competitionId) {
     const victorySuffix =
       competitionFinishResult?.competition_finished
         ? "?tournamentVictory=1"
         : "";
+
+    if (competitionType === "world_cup") {
+      router.push(
+        `/modes-speciaux/coupe-du-monde/${competitionId}${victorySuffix}`
+      );
+
+      return;
+    }
 
     router.push(
       `/modes-speciaux/grand-chelem/${competitionId}${victorySuffix}`
@@ -1199,6 +1407,7 @@ onBackToCompetition={
   router.push("/");
 }}
       onViewGrid={() => setShowFinalModal(false)}
+      
       />
     )}
     </main>

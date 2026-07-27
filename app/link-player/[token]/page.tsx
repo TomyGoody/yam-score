@@ -19,56 +19,63 @@ export default function LinkPlayerPage() {
   const router = useRouter();
 
   const token = Array.isArray(params.token) ? params.token[0] : params.token;
-
+const [claimError, setClaimError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tokenData, setTokenData] = useState<TokenData | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [claimSuccess, setClaimSuccess] = useState(false);
 const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  useEffect(() => {
-    async function load() {
-      const { data: tokenRow, error: tokenError } = await supabase
-        .from("player_link_tokens")
-        .select("token, host_user_id, status, expires_at, target_player_key")
-        .eq("token", token)
-        .maybeSingle();
+  async function loadTokenData() {
+  setLoading(true);
 
-      if (tokenError || !tokenRow) {
-        setTokenData(null);
-        setLoading(false);
-        return;
-      }
+  const { data: tokenRow, error: tokenError } = await supabase
+    .from("player_link_tokens")
+    .select(
+      "token, host_user_id, status, expires_at, target_player_key"
+    )
+    .eq("token", token)
+    .maybeSingle();
 
-      setTokenData(tokenRow);
+  if (tokenError || !tokenRow) {
+    setTokenData(null);
+    setLoading(false);
+    return;
+  }
 
-      const profile = await ensureUserProfile();
+  setTokenData(tokenRow);
 
-      if (profile) {
-        setCurrentUserId(profile.id);
+  const profile = await ensureUserProfile();
 
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", profile.id)
-          .single();
+  if (profile) {
+    setCurrentUserId(profile.id);
 
-        setUsername(profileData?.username ?? null);
-      }
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", profile.id)
+      .single();
 
-      setLoading(false);
-    }
+    setUsername(profileData?.username ?? null);
+  } else {
+    setCurrentUserId(null);
+    setUsername(null);
+  }
 
-    load();
+  setLoading(false);
+}
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      load();
-    });
+useEffect(() => {
+  void loadTokenData();
 
-    return () => subscription.unsubscribe();
-  }, [token]);
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(() => {
+    void loadTokenData();
+  });
+
+  return () => subscription.unsubscribe();
+}, [token]);
 
   async function validateLink() {
     if (!currentUserId || !username) {
@@ -89,15 +96,29 @@ const [successMessage, setSuccessMessage] = useState<string | null>(null);
     });
 
     if (error) {
-      console.error(error);
-      alert("Impossible d’associer ce profil.");
-      return;
-    }
+  console.error("Erreur association profil", {
+    message: error.message,
+    details: error.details,
+    hint: error.hint,
+    code: error.code,
+  });
 
-    if (!data?.success) {
-      alert(data?.message || "Impossible d’associer ce profil.");
-      return;
-    }
+  setClaimError(
+    error.message ||
+      "Impossible d’associer ce profil."
+  );
+
+  return;
+}
+
+if (!data?.success) {
+  setClaimError(
+    data?.message ||
+      "Cette place est déjà prise ou le lien a expiré."
+  );
+
+  return;
+}
 
     setClaimSuccess(true);
 setSuccessMessage("Profil associé avec succès.");
@@ -236,6 +257,36 @@ return (
         className="mt-6 w-full rounded-xl bg-[#C44934] py-3 font-black text-white hover:bg-[#D75A43]"
       >
         Terminé
+      </button>
+    </div>
+  </div>
+)}
+{claimError && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-red-500/60 bg-black p-6 text-center shadow-2xl">
+      <div className="text-5xl">⛔</div>
+
+      <div className="mt-3 text-sm font-black uppercase tracking-widest text-red-400">
+        Place indisponible
+      </div>
+
+      <h2 className="mt-2 text-3xl font-black text-white">
+        Cette place est déjà prise
+      </h2>
+
+      <p className="mt-3 font-bold text-slate-400">
+        {claimError}
+      </p>
+
+      <button
+        type="button"
+        onClick={() => {
+          setClaimError(null);
+          void loadTokenData();
+        }}
+        className="mt-6 w-full rounded-xl bg-[#C44934] py-3 font-black text-white hover:bg-[#D75A43]"
+      >
+        Actualiser
       </button>
     </div>
   </div>

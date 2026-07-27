@@ -3,17 +3,11 @@
 import Image from "next/image";
 import {
   getTournamentTheme,
-  TournamentTheme,
+  
 } from "../lib/tournamentThemes";
-type CompetitionHeaderData = {
-  competitionId: string;
-  roundNumber: number;
-  theme: TournamentTheme;
-  tournamentName: string;
-  player1SetsWon: number;
-  player2SetsWon: number;
-};
-
+import type {
+  CompetitionHeaderData,
+} from "../lib/competitionTypes";
 export default function GameScreen({
   fitToScreen,
   setFitToScreen,
@@ -63,35 +57,60 @@ export default function GameScreen({
   const tournamentTheme = competitionHeader
   ? getTournamentTheme(competitionHeader.theme)
   : null;
+  console.log({
+  competitionHeader,
+  tournamentTheme,
+});
+
   return (
     <section
-  className={[
-    "relative flex h-full min-h-0 flex-col overflow-hidden",
-    tournamentTheme?.pageBackground ?? "bg-black",
-  ].join(" ")}
+  className="relative flex h-full min-h-0 flex-col overflow-hidden"
+  style={{
+    backgroundColor:
+      tournamentTheme?.pageBackgroundColor ?? "#000000",
+  }}
 >
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
-        <Image
-          src="/favicon.png"
-          alt=""
-          width={1000}
-          height={1000}
-          className="select-none rotate-[-12deg]"
-        />
-      </div>
-      {tournamentTheme && (
-  <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-[0.08]">
-    <div className="absolute left-1/2 top-0 h-full w-px -translate-x-1/2 bg-white" />
+  {tournamentTheme?.backgroundImage && (
+  <>
+    <div
+      className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+      style={{
+        backgroundImage: `url('${tournamentTheme.backgroundImage}')`,
+      }}
+    />
 
-    <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-white" />
+    <div className="pointer-events-none absolute inset-0 bg-black/45" />
 
-    <div className="absolute left-1/2 top-1/2 h-[58%] w-[72%] -translate-x-1/2 -translate-y-1/2 border border-white" />
+    <div
+      className="pointer-events-none absolute inset-0"
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.52) 55%, rgba(0,0,0,0.80) 100%)",
+      }}
+    />
 
-    <div className="absolute left-1/2 top-1/2 h-[58%] w-px -translate-x-1/2 -translate-y-1/2 bg-white" />
-
-    <div className="absolute left-1/2 top-1/2 h-[58%] w-[28%] -translate-x-1/2 -translate-y-1/2 border-x border-white" />
+    {tournamentTheme.backgroundGlow && (
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: tournamentTheme.backgroundGlow,
+        }}
+      />
+    )}
+  </>
+)}
+     {!tournamentTheme?.backgroundImage && (
+  <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
+    <Image
+      src="/favicon.png"
+      alt=""
+      width={1000}
+      height={1000}
+      className="select-none rotate-[-12deg]"
+    />
   </div>
 )}
+      
 
       {competitionHeader ? (
   <CompetitionGameHeader
@@ -188,9 +207,12 @@ export default function GameScreen({
                 }
           }
           className={[
-            "flex w-max gap-3",
-            useSideLeaderboard ? "items-start" : "flex-col",
-          ].join(" ")}
+  "flex w-max gap-3",
+  fitToScreen && "py-5",
+  useSideLeaderboard ? "items-start" : "flex-col",
+]
+  .filter(Boolean)
+  .join(" ")}
         >
           <div className="flex w-max items-start gap-3">
             {players.map((player: any) => (
@@ -247,108 +269,179 @@ onOpenPlayerAccess?: () => void;
   return (
   <div
   className={[
-    "relative z-20 shrink-0 border-b px-3 py-2 text-white",
-    tournamentTheme.panelBackground,
-    tournamentTheme.border,
+    "relative z-20 shrink-0 border-b px-5 py-3 text-white shadow-xl",
+    competition.competitionType === "world_cup"
+  ? "border-[#D69E1F]/70"
+  : tournamentTheme.border
   ].join(" ")}
+  style={{
+  background: tournamentTheme.headerGradient,
+}}
 >
-  <div className="mx-auto flex w-full max-w-[1800px] items-center justify-between gap-4">
+  <div className="mx-auto flex w-full max-w-[1900px] items-center justify-between gap-6">
     <div className="flex min-w-0 items-center gap-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black/20 text-sm font-black">
-        {tournamentTheme.icon}
-      </div>
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center">
+  <Image
+    src={tournamentTheme.headerLogo}
+    alt={tournamentTheme.name}
+    width={56}
+    height={56}
+    className="max-h-14 w-auto object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.18)]"
+    priority
+  />
+</div>
 
       <div className="min-w-0">
-        <p className="truncate text-xs font-black uppercase tracking-widest text-white/70">
-          {competition.tournamentName}
-        </p>
+       <p
+  className={[
+    "truncate font-black uppercase",
+    competition.competitionType === "world_cup"
+      ? "text-xl tracking-[0.08em] text-[#DDB35A]"
+      : "text-xs tracking-[0.18em] text-white/70",
+  ].join(" ")}
+>
+  {competition.tournamentName}
+</p>
 
-        <p className="truncate text-base font-black">
-          Finale · Set {competition.roundNumber}
-        </p>
+        <p
+  className={[
+    "truncate font-black",
+    competition.competitionType === "world_cup"
+      ? "mt-0.5 text-lg text-white"
+      : "text-base",
+  ].join(" ")}
+>
+  {competition.roundLabel ??
+    `Finale · Set ${competition.roundNumber}`}
+</p>
       </div>
     </div>
 
     <div className="hidden items-center gap-3 md:flex">
-      <span className="max-w-[140px] truncate text-sm font-black">
-        {player1?.name ?? "Joueur 1"}
-      </span>
+  <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
+  {player1?.name ?? "Joueur 1"}
+</span>
 
-      <div className="rounded-lg border border-white/20 bg-black/20 px-3 py-1 text-base font-black">
-        {competition.player1SetsWon}–
-        {competition.player2SetsWon}
-      </div>
-
-      <span className="max-w-[140px] truncate text-sm font-black">
-        {player2?.name ?? "Joueur 2"}
-      </span>
+  {competition.competitionType === "world_cup" ? (
+    <div className="rounded-xl border border-[#D4A74A] bg-[#D4A74A]/10 px-5 py-2 text-base font-black tracking-[0.18em] text-[#FFF2BF] shadow-[0_0_20px_rgba(244,197,66,0.22)]">
+  VS
+</div>
+  ) : (
+    <div className="rounded-lg border border-white/20 bg-black/20 px-3 py-1 text-base font-black">
+      {competition.player1SetsWon}–{competition.player2SetsWon}
     </div>
+  )}
 
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() =>
-          setFitToScreen((current: boolean) => !current)
-        }
-        className="rounded-lg bg-black/20 px-3 py-2 text-xs font-black transition hover:bg-black/35"
-      >
-        {fitToScreen ? "Taille normale" : "Adapter"}
-      </button>
+  <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
+  {player2?.name ?? "Joueur 2"}
+</span>
+</div>
 
-      <button
-        type="button"
-        onClick={toggleFullscreen}
-        className="rounded-lg bg-black/20 px-3 py-2 text-xs font-black transition hover:bg-black/35"
-      >
-        Plein écran
-      </button>
-
-      {process.env.NODE_ENV === "development" &&
-        devFillRandomGame && (
-          <button
-            type="button"
-            onClick={devFillRandomGame}
-            className="rounded-lg bg-purple-700 px-3 py-2 text-xs font-black text-white hover:bg-purple-600"
-          >
-            🧪
-          </button>
-        )}
-{onUndoLastMove && (
+    <div className="flex items-center gap-3">
   <button
     type="button"
-    onClick={onUndoLastMove}
-    className="rounded-lg border border-amber-300/40 bg-amber-500/90 px-3 py-2 text-xs font-black text-black transition hover:bg-amber-400"
+    onClick={() =>
+      setFitToScreen((current: boolean) => !current)
+    }
+    className={[
+      "rounded-xl px-4 py-2.5 text-xs font-black transition",
+      competition.competitionType === "world_cup"
+        ? "border border-[#315F2D] bg-[#07130D]/90 text-white hover:border-[#D4A74A]/60 hover:bg-[#0B1E14]"
+        : "bg-black/20 hover:bg-black/35",
+    ].join(" ")}
   >
-    ↶ Annuler
+    {fitToScreen ? "Taille normale" : "Adapter"}
   </button>
-)}
-{onOpenPlayerAccess && (
+
   <button
     type="button"
-    onClick={onOpenPlayerAccess}
-    className="rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-xs font-black transition hover:bg-black/35"
+    onClick={toggleFullscreen}
+    className={[
+      "rounded-xl px-4 py-2.5 text-xs font-black transition",
+      competition.competitionType === "world_cup"
+        ? "border border-[#315F2D] bg-[#07130D]/90 text-white hover:border-[#D4A74A]/60 hover:bg-[#0B1E14]"
+        : "bg-black/20 hover:bg-black/35",
+    ].join(" ")}
   >
-    Accès joueurs
+    Plein écran
   </button>
-)}
-      {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="rounded-lg border border-white/20 bg-black/20 px-3 py-2 text-xs font-black transition hover:bg-black/35"
-        >
-          Voir la finale
-        </button>
-      )}
 
+  {process.env.NODE_ENV === "development" &&
+    devFillRandomGame && (
       <button
         type="button"
-        onClick={quitGame}
-        className="rounded-lg bg-[#C44934] px-3 py-2 text-xs font-black transition hover:bg-[#D75A43]"
+        onClick={devFillRandomGame}
+        className={[
+          "rounded-xl px-4 py-2.5 text-xs font-black transition",
+          competition.competitionType === "world_cup"
+            ? "border border-[#D4A74A]/70 bg-[#D4A74A]/10 text-[#FFF2BF] hover:bg-[#D4A74A]/20"
+            : "bg-purple-700 text-white hover:bg-purple-600",
+        ].join(" ")}
       >
-        {quitLabel ?? "Quitter"}
+        🧪
       </button>
-    </div>
+    )}
+
+  {onUndoLastMove && (
+    <button
+      type="button"
+      onClick={onUndoLastMove}
+      className={[
+        "rounded-xl px-4 py-2.5 text-xs font-black transition",
+        competition.competitionType === "world_cup"
+          ? "border border-[#D4A74A]/70 bg-[#D4A74A]/10 text-[#FFF2BF] hover:bg-[#D4A74A]/20"
+          : "border border-amber-300/40 bg-amber-500/90 text-black hover:bg-amber-400",
+      ].join(" ")}
+    >
+      ↶ Annuler
+    </button>
+  )}
+
+  {onOpenPlayerAccess && (
+    <button
+      type="button"
+      onClick={onOpenPlayerAccess}
+      className={[
+        "rounded-xl px-4 py-2.5 text-xs font-black transition",
+        competition.competitionType === "world_cup"
+          ? "border border-[#315F2D] bg-[#07130D]/90 text-white hover:border-[#D4A74A]/60 hover:bg-[#0B1E14]"
+          : "border border-white/20 bg-black/20 hover:bg-black/35",
+      ].join(" ")}
+    >
+      Accès joueurs
+    </button>
+  )}
+
+  {onBack && (
+    <button
+      type="button"
+      onClick={onBack}
+      className={[
+        "rounded-xl px-4 py-2.5 text-xs font-black transition",
+        competition.competitionType === "world_cup"
+          ? "border border-[#315F2D] bg-[#07130D]/90 text-white hover:border-[#D4A74A]/60 hover:bg-[#0B1E14]"
+          : "border border-white/20 bg-black/20 hover:bg-black/35",
+      ].join(" ")}
+    >
+      {competition.competitionType === "world_cup"
+        ? "Voir le tableau"
+        : "Voir la finale"}
+    </button>
+  )}
+
+  <button
+    type="button"
+    onClick={quitGame}
+    className={[
+      "rounded-xl px-4 py-2.5 text-xs font-black text-white transition",
+      competition.competitionType === "world_cup"
+        ? "border border-red-400/40 bg-[#C93838] shadow-[0_0_16px_rgba(201,56,56,0.15)] hover:bg-[#DB4747]"
+        : "bg-[#C44934] hover:bg-[#D75A43]",
+    ].join(" ")}
+  >
+    {quitLabel ?? "Quitter"}
+  </button>
+</div>
   </div>
 </div>
 );

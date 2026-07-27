@@ -306,7 +306,7 @@ if (gameStatus === "playing" && gameId && playerId) {
       }}
       className="mb-4 w-full rounded-xl bg-slate-900 px-4 py-3 font-black text-white hover:bg-slate-800"
     >
-      ← Quitter le salon
+      Quitter le salon
     </button>
   )}
         <div className="text-5xl">🎲</div>

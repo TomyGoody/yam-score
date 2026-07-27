@@ -626,11 +626,11 @@ players.find(
 ) ?? null;
 return (
   <main
-  className={[
-    "relative min-h-dvh overflow-hidden px-4 py-8 text-white",
-    tournament.pageBackground,
-  ].join(" ")}
-  >
+  className="relative min-h-dvh overflow-hidden px-4 py-8 text-white"
+  style={{
+    backgroundColor: tournament.pageBackgroundColor,
+  }}
+>
   <AuthButton />
   
   <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
@@ -655,16 +655,18 @@ return (
     tournament.buttonHover,
   ].join(" ")}
   >
-  ← Modes spéciaux
+  Modes spéciaux
   </button>
   
   <section
   className={[
     "relative mt-8 overflow-hidden rounded-3xl border-2",
-    tournament.panelBackground,
-    tournament.border
+    tournament.border,
   ].join(" ")}
-  >
+  style={{
+    backgroundColor: tournament.panelBackgroundColor,
+  }}
+>
   <div className="pointer-events-none absolute inset-0 opacity-15">
   <div className="absolute left-1/2 top-0 h-full w-px bg-white" />
   <div className="absolute left-0 top-1/2 h-px w-full bg-white" />
@@ -674,7 +676,16 @@ return (
   
   <div className="relative z-10 px-5 py-8 sm:px-8 sm:py-10">
   <div className="text-center">
-  <div className="text-5xl">{tournament.icon}</div>
+  <div className="flex justify-center">
+  <Image
+    src={tournament.headerLogo}
+    alt={tournament.name}
+    width={96}
+    height={96}
+    className="h-24 w-auto object-contain drop-shadow-xl"
+    priority
+  />
+</div>
   
   <p className="mt-4 text-sm font-black uppercase tracking-[0.3em] text-white/70">
   Finale de Grand Chelem
@@ -1015,13 +1026,15 @@ return (
           competitionWinner &&
           competitionLoser && (
             <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/90 px-4">
-            <div
-            className={[
-              "relative w-full max-w-lg overflow-hidden rounded-3xl border-2 text-white shadow-2xl",
-              tournament.panelBackground,
-              tournament.border
-            ].join(" ")}
-            >
+           <div
+  className={[
+    "relative w-full max-w-lg overflow-hidden rounded-3xl border-2 text-white shadow-2xl",
+    tournament.border,
+  ].join(" ")}
+  style={{
+    backgroundColor: tournament.panelBackgroundColor,
+  }}
+>
             <div className="pointer-events-none absolute inset-0 opacity-15">
             <div className="absolute left-1/2 top-0 h-full w-px bg-white" />
             <div className="absolute left-0 top-1/2 h-px w-full bg-white" />

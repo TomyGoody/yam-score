@@ -16,6 +16,7 @@ import {
   PERFORMANCE_6COLS_MILESTONES,
   EXPLOIT_WIN_STREAK,
   GRAND_SLAM_WIN_MILESTONES,
+  WORLD_CUP_MILESTONES,
 } from "../lib/xpRules";
 import {
   LEVEL_XP,
@@ -950,6 +951,16 @@ const levelProgress =
   value: achievementStats?.us_open_wins ?? 0,
   milestones: GRAND_SLAM_WIN_MILESTONES,
 },
+{
+  value:
+    achievementStats?.world_cup_finals_reached ?? 0,
+  milestones: WORLD_CUP_MILESTONES,
+},
+{
+  value:
+    achievementStats?.world_cup_wins ?? 0,
+  milestones: WORLD_CUP_MILESTONES,
+},
         ];
         
         const unlockedAchievements = achievementItems.reduce(
@@ -1821,7 +1832,7 @@ const paginatedHistory = sortedHistory.slice(
               disabled={historyPage === 1}
               className="rounded-lg bg-[#241A13] px-4 py-2 font-black text-white disabled:opacity-40"
             >
-              ← Précédent
+              Précédent
             </button>
 
             <span className="font-black text-slate-400">
@@ -2009,6 +2020,25 @@ const paginatedHistory = sortedHistory.slice(
     title="US Open remportés"
     value={achievementStats?.us_open_wins ?? 0}
     milestones={GRAND_SLAM_WIN_MILESTONES}
+  />
+</AchievementSection>
+<AchievementSection title="⚽ Coupe du Monde">
+  <AchievementCard
+    icon="🏟️"
+    title="Finales atteintes"
+    value={
+      achievementStats?.world_cup_finals_reached ?? 0
+    }
+    milestones={WORLD_CUP_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🏆"
+    title="Coupes du Monde remportées"
+    value={
+      achievementStats?.world_cup_wins ?? 0
+    }
+    milestones={WORLD_CUP_MILESTONES}
   />
 </AchievementSection>
                 <AchievementSection title="🏅 Exploits">

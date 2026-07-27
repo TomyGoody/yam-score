@@ -17,11 +17,14 @@ export async function rebuildProfileStats(profileId: string) {
       final_rank,
       yams_count,
       local_games!inner(
-        mode,
-        player_count,
-        status,
-        source
-      )
+  mode,
+  player_count,
+  status,
+  source,
+  competition_id,
+  competition_round_number,
+  competition_match_id
+)
     `)
     .eq("profile_id", profileId)
     .eq("local_games.status", "finished");
@@ -32,7 +35,84 @@ export async function rebuildProfileStats(profileId: string) {
   }
 
   const gameIds = games.map((game) => game.game_id);
+const competitionIds = Array.from(
+  new Set(
+    games
+      .map((game) => {
+        const gameInfo = Array.isArray(game.local_games)
+          ? game.local_games[0]
+          : game.local_games;
 
+        return gameInfo?.competition_id ?? null;
+      })
+      .filter((id): id is string => Boolean(id))
+  )
+);
+const matchIds = Array.from(
+  new Set(
+    games
+      .map((game) => {
+        const gameInfo = Array.isArray(game.local_games)
+          ? game.local_games[0]
+          : game.local_games;
+
+        return gameInfo?.competition_match_id ?? null;
+      })
+      .filter((id): id is string => Boolean(id))
+  )
+);
+
+const { data: competitionMatches, error: matchesError } =
+  matchIds.length > 0
+    ? await supabase
+        .from("competition_matches")
+        .select("id, next_match_id")
+        .in("id", matchIds)
+    : { data: [], error: null };
+
+if (matchesError) {
+  console.error(matchesError);
+  return;
+}
+const nextMatchIds = Array.from(
+  new Set(
+    (competitionMatches ?? [])
+      .map((m) => m.next_match_id)
+      .filter((id): id is string => Boolean(id))
+  )
+);
+
+const { data: nextMatches } =
+  nextMatchIds.length > 0
+    ? await supabase
+        .from("competition_matches")
+        .select("id, next_match_id")
+        .in("id", nextMatchIds)
+    : { data: [] };
+const { data: competitions, error: competitionsError } =
+  competitionIds.length > 0
+    ? await supabase
+        .from("competitions")
+        .select("id, competition_type")
+        .in("id", competitionIds)
+    : { data: [], error: null };
+
+if (competitionsError) {
+  console.error(
+    "Erreur rebuild stats - compétitions",
+    competitionsError
+  );
+  return;
+}
+
+const worldCupCompetitionIds = new Set(
+  (competitions ?? [])
+    .filter(
+      (competition) =>
+        competition.competition_type === "world_cup"
+    )
+    .map((competition) => competition.id)
+);
   const { data: scoreRows, error: scoresError } =
     gameIds.length > 0
       ? await supabase
@@ -71,6 +151,8 @@ export async function rebuildProfileStats(profileId: string) {
     games_4_players: 0,
     games_5_players: 0,
     games_6_players: 0,
+    world_cup_finals_reached: 0,
+world_cup_wins: 0,
   };
 
   for (const game of games) {
@@ -131,7 +213,15 @@ export async function rebuildProfileStats(profileId: string) {
 
     const finalScore = game.final_score ?? 0;
     const finalRank = game.final_rank ?? 999;
+const competitionId =
+  gameInfo.competition_id ?? null;
 
+const competitionRoundNumber =
+  gameInfo.competition_round_number ?? null;
+
+const isWorldCup =
+  Boolean(competitionId) &&
+  worldCupCompetitionIds.has(competitionId);
     if (mode === "3cols") {
       stats.games_played_3 += 1;
       stats.total_points_3 += finalScore;
@@ -160,7 +250,32 @@ export async function rebuildProfileStats(profileId: string) {
     stats.bonus_total += activeColumns.filter(
       (column) => getBonus(column.id) > 0
     ).length;
+const competitionMatch =
+  competitionMatches?.find(
+    (m) => m.id === gameInfo.competition_match_id
+  );
 
+const nextMatch =
+  nextMatches?.find(
+    (m) => m.id === competitionMatch?.next_match_id
+  );
+
+const isFinal =
+  competitionMatch?.next_match_id == null;
+
+const isSemiFinal =
+  competitionMatch?.next_match_id != null &&
+  nextMatch?.next_match_id == null;
+
+if (isWorldCup && finalRank === 1) {
+  if (isSemiFinal) {
+    stats.world_cup_finals_reached++;
+  }
+
+  if (isFinal) {
+    stats.world_cup_wins++;
+  }
+}
     if (playerCount === 2) stats.games_2_players += 1;
     if (playerCount === 3) stats.games_3_players += 1;
     if (playerCount === 4) stats.games_4_players += 1;

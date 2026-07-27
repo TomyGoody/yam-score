@@ -55,19 +55,99 @@ export default function GrandSlamPage() {
           onClick={() => router.push("/modes-speciaux")}
           className="rounded-xl border border-[#9B6A28]/60 bg-black px-4 py-2 font-black text-white transition hover:bg-[#241A13]"
         >
-          ← Modes spéciaux
+          Modes spéciaux
         </button>
 
         <section className="mt-8 overflow-hidden rounded-3xl border border-[#9B6A28]/60">
-          <div className="relative min-h-[320px] overflow-hidden bg-[#315B40] px-6 py-12 sm:px-10">
-            <div className="pointer-events-none absolute inset-0 opacity-20">
-              <div className="absolute left-1/2 top-0 h-full w-px bg-white" />
-              <div className="absolute left-0 top-1/2 h-px w-full bg-white" />
+          <div className="relative min-h-[320px] overflow-hidden bg-[#B85632] px-6 py-12 sm:px-10">
+            {/* Rectangle extérieur */}
+  <div
+    className="absolute border-2 border-white"
+    style={{
+      left: "5%",
+      right: "5%",
+      top: "5%",
+      bottom: "5%",
+    }}
+  >
+    {/* Ligne du haut (couloir) */}
+    <div
+      className="absolute left-0 right-0 border-t-2 border-white"
+      style={{ top: "12%" }}
+    />
 
-              <div className="absolute left-1/2 top-1/2 h-40 w-60 -translate-x-1/2 -translate-y-1/2 border border-white" />
+    {/* Ligne du bas (couloir) */}
+    <div
+      className="absolute left-0 right-0 border-b-2 border-white"
+      style={{ bottom: "12%" }}
+    />
+{/* Ligne de double haute */}
+<div
+  className="absolute bg-white"
+  style={{
+    left: 0,
+    right: 0,
+    top: "10%",
+    height: "2px",
+  }}
+/>
 
-              <div className="absolute left-1/2 top-1/2 h-40 w-px -translate-x-1/2 -translate-y-1/2 bg-white" />
-            </div>
+{/* Ligne de double basse */}
+<div
+  className="absolute bg-white"
+  style={{
+    left: 0,
+    right: 0,
+    bottom: "10%",
+    height: "2px",
+  }}
+/>
+    {/* Filet */}
+    <div
+      className="absolute bg-white"
+      style={{
+        left: "50%",
+        top: "-8px",
+        bottom: "-8px",
+        width: "2px",
+        transform: "translateX(-50%)",
+      }}
+    />
+
+    {/* Ligne de service gauche */}
+    <div
+      className="absolute bg-white"
+      style={{
+        left: "25%",
+        top: "10%",
+        bottom: "10%",
+        width: "2px",
+      }}
+    />
+
+    {/* Ligne de service droite */}
+    <div
+      className="absolute bg-white"
+      style={{
+        right: "25%",
+        top: "10%",
+        bottom: "10%",
+        width: "2px",
+      }}
+    />
+
+    {/* Ligne centrale de service */}
+<div
+  className="absolute bg-white"
+  style={{
+    left: "25%",
+    right: "25%",
+    top: "50%",
+    height: "2px",
+    transform: "translateY(-50%)",
+  }}
+/>
+  </div>
 
             <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center text-center">
               <div className="text-7xl">🎾</div>
@@ -76,11 +156,16 @@ export default function GrandSlamPage() {
                 Mode spécial
               </p>
 
-              <h1 className="mt-3 text-4xl font-black sm:text-6xl">
+              <h1
+                className="mt-3 text-4xl font-black sm:text-6xl"
+                style={{
+                  WebkitTextStroke: "1px black",
+                }}
+              >
                 Finale de Grand Chelem
               </h1>
 
-              <p className="mt-5 max-w-2xl text-lg font-bold text-white/80">
+               <p className="mt-5 max-w-2xl text-lg font-bold text-white/85">
                 Affrontez un adversaire dans une finale composée de plusieurs
                 parties de Yam. Le premier à remporter trois sets soulève le
                 trophée.
@@ -166,7 +251,7 @@ export default function GrandSlamPage() {
             onClick={() =>
               router.push("/modes-speciaux/grand-chelem/nouveau")
             }
-            className="mt-6 w-full rounded-xl bg-[#C44934] px-5 py-4 text-lg font-black text-white transition hover:bg-[#D75A43]"
+            className="mt-6 w-full rounded-xl bg-[#B85632] px-5 py-4 text-lg font-black text-white transition hover:bg-[#D75A43]"
           >
             Créer ma finale
           </button>
@@ -187,7 +272,7 @@ function Step({
 }) {
   return (
     <article className="rounded-2xl border border-slate-800 bg-black p-5">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#C44934] text-lg font-black text-white">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#B85632] text-lg font-black text-white">
         {number}
       </div>
 

@@ -21,6 +21,7 @@ export const WIN_STREAK_MILESTONES = [1, 2, 3, 4, 5, 6,7,8];
 export const PERFORMANCE_3COLS_MILESTONES = [700,750,775 ,800, 825, 850,875, 900];
 export const UNIQUE_ACHIEVEMENT_MILESTONE = [1];
 export const GRAND_SLAM_WIN_MILESTONES = [1, 3, 5, 10, 25, 50, 100, 250];
+export const WORLD_CUP_MILESTONES = [1, 3, 5, 10, 25, 50, 100, 250];
 export const PERFORMANCE_6COLS_MILESTONES = [1400, 1500, 1550, 1600, 1650, 1700, 1750, 1800];
 export const EXPLOIT_3COLS_MILESTONES = [1000];
 export const EXPLOIT_WIN_STREAK = [10];
@@ -116,6 +117,19 @@ export const achievementDefinitions = [
   metric: "career_grand_slam",
   milestones: [1],
 },
+{
+  id: "world_cup_finals_reached",
+  label: "Finales de Coupe du Monde atteintes",
+  metric: "world_cup_finals_reached",
+  milestones: WORLD_CUP_MILESTONES,
+},
+{
+  id: "world_cup_wins",
+  label: "Coupes du Monde remportées",
+  metric: "world_cup_wins",
+  milestones: WORLD_CUP_MILESTONES,
+},
+
 ] as const;
 
 export function getUnlockedMilestoneIndexes(value: number, milestones: readonly number[]) {

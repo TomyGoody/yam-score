@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import type { TournamentThemeConfig } from "../lib/tournamentThemes";
 type VictoryPlayer = {
   id: string;
@@ -15,8 +16,11 @@ type XpResult = {
   xpGain: number;
   oldLevel: number;
   newLevel: number;
+
   baseXp: number;
+ 
   badgeXp: number;
+
   badges: {
     label: string;
     milestone: number;
@@ -30,26 +34,46 @@ export default function VictoryModal({
   onBackHome,
   tournamentTheme,
   onViewGrid,
+  competitionType,
+  competitionFinished,
 }: {
   players: VictoryPlayer[];
   xpResults: Record<string, XpResult>;
   onBackHome: () => void;
   onViewGrid?: () => void;
   tournamentTheme?: TournamentThemeConfig | null;
+  competitionType?: "grand_slam_final" | "world_cup" | null;
+  competitionFinished?: boolean;
 }) {
   const [selectedXpPlayerId, setSelectedXpPlayerId] = useState<string | null>(null);
+const isGrandSlam =
+  competitionType === "grand_slam_final";
 
+const isWorldCup =
+  competitionType === "world_cup";
+
+const isWorldCupChampion =
+  isWorldCup && competitionFinished;
+
+const winner = players[0] ?? null;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-      <div
-  className={[
-    "relative w-full max-w-lg overflow-hidden rounded-3xl border-2 p-6 text-white shadow-2xl",
-    tournamentTheme
-      ? `${tournamentTheme.panelBackground} ${tournamentTheme.border}`
-      : "border-[#9B6A28] bg-black",
-  ].join(" ")}
->
- {tournamentTheme && (
+  <div
+    className={[
+      "relative w-full max-w-lg overflow-hidden rounded-3xl border-2 p-6 text-white shadow-2xl",
+      tournamentTheme
+        ? tournamentTheme.border
+        : "border-[#9B6A28] bg-black",
+    ].join(" ")}
+    style={
+  tournamentTheme
+    ? {
+        background: tournamentTheme.headerGradient,
+      }
+    : undefined
+}
+  >
+ {tournamentTheme && !isWorldCup && (
   <div className="pointer-events-none absolute inset-0 opacity-15">
     <div className="absolute left-1/2 top-0 h-full w-px bg-white" />
     <div className="absolute left-0 top-1/2 h-px w-full bg-white" />
@@ -58,26 +82,63 @@ export default function VictoryModal({
 )}
 
 <div className="relative z-10">
-  <div className="text-6xl">
-  {tournamentTheme ? tournamentTheme.icon : "🏆"}
-</div>
+ {tournamentTheme ? (
+  <div className="flex justify-center">
+    <Image
+      src={tournamentTheme.headerLogo}
+      alt={tournamentTheme.name}
+      width={96}
+      height={96}
+      className="h-24 w-auto object-contain drop-shadow-xl"
+      priority
+    />
+  </div>
+) : (
+  <div className="text-6xl">🏆</div>
+)}
 
 <p
   className={[
     "mt-3 text-sm font-black uppercase tracking-[0.3em]",
     tournamentTheme
       ? tournamentTheme.accentText
-      : "text-[#C44934]",
+      : isWorldCup
+        ? "text-emerald-300"
+        : "text-[#C44934]",
   ].join(" ")}
 >
-  {tournamentTheme ? "Set remporté" : "Partie terminée"}
+  {isWorldCupChampion
+    ? "Coupe du Monde remportée"
+    : isWorldCup
+      ? "Match remporté"
+      : isGrandSlam
+        ? "Set remporté"
+        : "Partie terminée"}
 </p>
 
 <h2 className="mt-2 text-3xl font-black">
-  {tournamentTheme ? players[0]?.name : "Classement final"}
+  {isWorldCupChampion
+    ? winner?.name
+    : isWorldCup
+      ? winner?.name
+      : isGrandSlam
+        ? winner?.name
+        : "Classement final"}
 </h2>
 
-{tournamentTheme && (
+{isWorldCupChampion && (
+  <p className="mt-2 text-white/70">
+    Champion du monde YamScore
+  </p>
+)}
+
+{isWorldCup && !isWorldCupChampion && (
+  <p className="mt-2 text-white/70">
+    Se qualifie pour le tour suivant
+  </p>
+)}
+
+{isGrandSlam && tournamentTheme && (
   <p className="mt-2 text-white/70">
     Remporte le set de {tournamentTheme.name}
   </p>
@@ -87,7 +148,9 @@ export default function VictoryModal({
           {players.map((player) => {
             const xp = xpResults[player.id];
             const playerOrder = player.player_order ?? player.playerOrder;
-
+const isLightPlayerCard = tournamentTheme
+  ? player.rank === 1
+  : player.rank !== 1;
             return (
               <div
                 key={player.id}
@@ -135,18 +198,26 @@ export default function VictoryModal({
                         )
                       }
                       className={[
-                        "flex w-full items-center justify-between rounded-xl p-3 text-left text-sm font-black transition",
-                        player.rank === 1
-                          ? "bg-black/20 text-white hover:bg-black/30"
-                          : "bg-black/10 text-black hover:bg-black/15",
-                      ].join(" ")}
+  "flex w-full items-center justify-between rounded-xl p-3 text-left text-sm font-black transition",
+  isLightPlayerCard
+    ? "bg-black/10 text-[#241812] hover:bg-black/15"
+    : "bg-white/10 text-white hover:bg-white/15",
+].join(" ")}
                     >
                       <span>
                         ⭐ Niveau {xp.newLevel}
                         {xp.newLevel > xp.oldLevel && (
-                          <span className="ml-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-emerald-300">
-                            +{xp.newLevel - xp.oldLevel}
-                          </span>
+                          <span
+  className={[
+    "ml-2 rounded-full px-2 py-0.5",
+    isLightPlayerCard
+      ? "bg-emerald-600/15 text-emerald-800"
+      : "bg-emerald-400/20 text-emerald-300",
+  ].join(" ")}
+>
+  +{xp.newLevel - xp.oldLevel}
+</span>
+                            
                         )}
                       </span>
 
@@ -159,21 +230,23 @@ export default function VictoryModal({
                     {selectedXpPlayerId === player.id && (
                       <div
                         className={[
-                          "mt-2 rounded-xl p-3 text-left text-xs font-black",
-                          player.rank === 1
-                            ? "bg-black/20 text-white"
-                            : "bg-black/10 text-black",
-                        ].join(" ")}
+  "mt-2 rounded-xl p-3 text-left text-xs font-black",
+  isLightPlayerCard
+    ? "bg-black/10 text-[#241812]"
+    : "bg-white/10 text-white",
+].join(" ")}
                       >
                         <div className="flex justify-between">
-                          <span>Progression</span>
-                          <span>+{xp.baseXp} XP</span>
-                        </div>
+  <span>Progression</span>
+  <span>+{xp.baseXp} XP</span>
+</div>
 
-                        <div className="mt-2 flex justify-between">
-                          <span>Succès</span>
-                          <span>+{xp.badgeXp} XP</span>
-                        </div>
+
+
+<div className="mt-2 flex justify-between">
+  <span>Succès</span>
+  <span>+{xp.badgeXp} XP</span>
+</div>
 
                         {xp.badges.length > 0 && (
                           <div className="mt-3 space-y-1">
@@ -217,7 +290,13 @@ export default function VictoryModal({
         : "bg-[#241A13] text-white hover:bg-[#322217]",
     ].join(" ")}
   >
-    {tournamentTheme ? "Retour à la finale" : "Retour accueil"}
+    {isWorldCupChampion
+  ? "Voir le champion"
+  : isWorldCup
+    ? "Retour à la Coupe du Monde"
+    : isGrandSlam
+      ? "Retour à la finale"
+      : "Retour accueil"}
   </button>
 </div>
         </div>
