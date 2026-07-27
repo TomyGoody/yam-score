@@ -1002,25 +1002,25 @@ function getNewUnlockedBadges(beforeStats: any, afterStats: any) {
   return achievementDefinitions.flatMap((definition) => {
     const beforeValue = beforeStats?.[definition.metric] ?? 0;
     const afterValue = afterStats?.[definition.metric] ?? 0;
-    
+
     const beforeUnlocked = getUnlockedMilestoneIndexes(
       beforeValue,
       definition.milestones
     );
-    
+
     const afterUnlocked = getUnlockedMilestoneIndexes(
       afterValue,
       definition.milestones
     );
-    
+
     return afterUnlocked
-    .filter((index) => !beforeUnlocked.includes(index))
-    .map((index) => ({
-      id: definition.id,
-      label: definition.label,
-      milestone: definition.milestones[index],
-      xp: BADGE_XP[index] ?? 0,
-    }));
+      .filter((index) => !beforeUnlocked.includes(index))
+      .map((index) => ({
+        id: definition.id,
+        label: definition.label,
+        milestone: definition.milestones[index],
+        xp: definition.xpRewards?.[index] ?? BADGE_XP[index] ?? 0,
+      }));
   });
 }
 function getBaseXpGain(playerId: string, rank: number) {

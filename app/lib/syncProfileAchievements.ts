@@ -22,7 +22,7 @@ function getAllUnlockedBadges(stats: ProfileStats | null) {
       id: definition.id,
       label: definition.label,
       milestone: definition.milestones[index],
-      xp: BADGE_XP[index] ?? 0,
+      xp: definition.xpRewards?.[index] ?? BADGE_XP[index] ?? 0,
     }));
   });
 }

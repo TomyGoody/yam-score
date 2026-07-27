@@ -177,6 +177,7 @@ export default function ProfilePage() {
   const [rivalries, setRivalries] = useState<RivalryOpponent[]>([]);
   const [selectedRivalId, setSelectedRivalId] = useState<string | null>(null);
   const [scoreChart, setScoreChart] = useState<ChartPoint[]>([]);
+  const [showRanksModal, setShowRanksModal] = useState(false);
   const [selectedMode, setSelectedMode] = useState<GameMode>("6cols");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [customStartDate, setCustomStartDate] = useState("");
@@ -921,11 +922,11 @@ const levelProgress =
           },
           {
   value: achievementStats?.best_score_3 ?? 0,
-  milestones: EXPLOIT_3COLS_MILESTONES,
+  milestones: PERFORMANCE_3COLS_MILESTONES,
 },
 {
   value: achievementStats?.best_score_6 ?? 0,
-  milestones: EXPLOIT_6COLS_MILESTONES,
+  milestones: PERFORMANCE_6COLS_MILESTONES,
 },
 {
   value: achievementStats?.best_win_streak ?? 0,
@@ -1857,7 +1858,18 @@ const paginatedHistory = sortedHistory.slice(
               
               {activeTab === "achievements" && (
                 <div className="mt-6 rounded-2xl border border-slate-800 bg-black p-5">
-                <h2 className="text-xl font-black">Succès</h2>
+                <div className="flex items-center gap-2">
+  <h2 className="text-2xl font-black">Succès</h2>
+
+  <button
+    type="button"
+    onClick={() => setShowRanksModal(true)}
+    className="flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-[#111111] text-sm font-black text-slate-300 transition hover:border-[#9B6A28] hover:text-white"
+    title="Comprendre les rangs"
+  >
+    ?
+  </button>
+</div>
                 <div className="mt-5 rounded-2xl bg-[#F4E9DC] p-5 text-black">
                 <div className="flex items-center justify-between gap-4">
                 <div>
@@ -2209,6 +2221,57 @@ const paginatedHistory = sortedHistory.slice(
               )}
               </section>
               </div>
+              {showRanksModal && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-6 text-white shadow-2xl">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black">
+          Rangs des succès
+        </h2>
+
+        <button
+          onClick={() => setShowRanksModal(false)}
+          className="rounded-lg px-3 py-1 text-slate-400 transition hover:bg-slate-900 hover:text-white"
+        >
+          ✕
+        </button>
+      </div>
+
+      <p className="mt-3 text-sm text-slate-400">
+        Chaque succès progresse en débloquant ses différents paliers.
+      </p>
+
+      <div className="mt-6 space-y-2">
+        {[
+          ["⚪", "Non classé", "Aucun palier débloqué"],
+          ["🥉", "Bronze", "1 palier débloqué"],
+          ["🥈", "Argent", "2 paliers débloqués"],
+          ["🥇", "Or", "3 paliers débloqués"],
+          ["💎", "Platine", "4 paliers débloqués"],
+          ["👑", "Diamant", "5 paliers débloqués"],
+          ["🌟", "Maître", "6 paliers débloqués"],
+          ["🔥", "Légende", "7 paliers débloqués"],
+          ["🌌", "Mythique", "Tous les paliers débloqués"],
+        ].map(([emoji, rank, description]) => (
+          <div
+            key={rank}
+            className="flex items-center justify-between rounded-xl border border-slate-800 bg-[#111111] px-4 py-3"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-xl">{emoji}</span>
+
+              <span className="font-black">{rank}</span>
+            </div>
+
+            <span className="text-sm text-slate-400">
+              {description}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
               </main>
             );
           }

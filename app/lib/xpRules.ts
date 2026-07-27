@@ -15,7 +15,16 @@ export const FIGURE_XP = {
   bonus: 5,
 };
 
-export const BADGE_XP = [100, 250, 500, 1000, 2000, 3500, 5000, 10000];
+export const BADGE_XP = [
+  10,
+  50,
+  150,
+  350,
+  700,
+  1200,
+  1800,
+  2500,
+];
 export const DEFAULT_MILESTONES = [1, 10, 50, 100, 500, 1000, 5000, 10000];
 export const WIN_STREAK_MILESTONES = [1, 2, 3, 4, 5, 6,7,8];
 export const PERFORMANCE_3COLS_MILESTONES = [700,750,775 ,800, 825, 850,875, 900];
@@ -26,7 +35,24 @@ export const PERFORMANCE_6COLS_MILESTONES = [1400, 1500, 1550, 1600, 1650, 1700,
 export const EXPLOIT_3COLS_MILESTONES = [1000];
 export const EXPLOIT_WIN_STREAK = [10];
 export const EXPLOIT_6COLS_MILESTONES = [2000];
-export const achievementDefinitions = [
+export const PERFORMANCE_BADGE_XP = [
+  10,
+  25,
+  50,
+  75,
+  100,
+  150,
+  250,
+  500,
+];
+type AchievementDefinition = {
+  id: string;
+  label: string;
+  metric: string;
+  milestones: readonly number[];
+  xpRewards?: readonly number[];
+};
+export const achievementDefinitions: readonly AchievementDefinition[] = [
   {
     id: "games_played_3",
     label: "Parties jouées · 3 colonnes",
@@ -52,22 +78,68 @@ export const achievementDefinitions = [
     milestones: DEFAULT_MILESTONES,
   },
   {
+  id: "three_of_a_kind_total",
+  label: "Brelans réalisés",
+  metric: "three_of_a_kind_total",
+  milestones: DEFAULT_MILESTONES,
+},
+{
+  id: "full_house_total",
+  label: "Fulls réalisés",
+  metric: "full_house_total",
+  milestones: DEFAULT_MILESTONES,
+},
+{
+  id: "four_of_a_kind_total",
+  label: "Carrés réalisés",
+  metric: "four_of_a_kind_total",
+  milestones: DEFAULT_MILESTONES,
+},
+{
+  id: "straight_total",
+  label: "Suites réalisées",
+  metric: "straight_total",
+  milestones: DEFAULT_MILESTONES,
+},
+{
+  id: "bonus_total",
+  label: "Bonus obtenus",
+  metric: "bonus_total",
+  milestones: DEFAULT_MILESTONES,
+},
+  {
     id: "yams_total",
     label: "Yams réalisés",
     metric: "yams_total",
     milestones: [1, 10, 50, 100, 250, 500, 1000, 5000],
   },
   {
+  id: "performance_3",
+  label: "Performance · 3 colonnes",
+  metric: "best_score_3",
+  milestones: PERFORMANCE_3COLS_MILESTONES,
+  xpRewards: PERFORMANCE_BADGE_XP,
+},
+{
+  id: "performance_6",
+  label: "Performance · 6 colonnes",
+  metric: "best_score_6",
+  milestones: PERFORMANCE_6COLS_MILESTONES,
+  xpRewards: PERFORMANCE_BADGE_XP,
+},
+  {
   id: "club_1000_3",
   label: "Le Club des 1000",
   metric: "best_score_3",
   milestones: EXPLOIT_3COLS_MILESTONES,
+  xpRewards: [1000],
 },
 {
   id: "club_2000_6",
   label: "Le Club des 2000",
   metric: "best_score_6",
   milestones: EXPLOIT_6COLS_MILESTONES,
+  xpRewards: [2000],
 },
 {
   id: "win_streak",
@@ -130,7 +202,7 @@ export const achievementDefinitions = [
   milestones: WORLD_CUP_MILESTONES,
 },
 
-] as const;
+] ;
 
 export function getUnlockedMilestoneIndexes(value: number, milestones: readonly number[]) {
   return milestones
