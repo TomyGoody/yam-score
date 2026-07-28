@@ -5,10 +5,11 @@ import { columns, rows, YamRow } from "./lib/yamRules";
 import Image from "next/image";
 import { supabase } from "./lib/supabase";
 import VictoryModal from "./components/VictoryModal";
-import { useRouter } from "next/navigation";
+import { useRouter,useSearchParams } from "next/navigation";
 import GameScreen from "./components/GameScreen";
 import Leaderboard from "./components/Leaderboard";
 import { getLevelFromTotalXp } from "./lib/levelRules";
+
 import { getTournamentTheme } from "./lib/tournamentThemes";
 import type { TournamentThemeConfig } from "./lib/tournamentThemes";
 import {
@@ -94,6 +95,11 @@ const PLAYER_COLORS = [
     bg: "bg-violet-500/10",
   },
 ];
+type HomeStats = {
+  gamesPlayed: number;
+  winRate: number;
+  currentWinStreak: number;
+};
 export default function Home() {
   const [currentUsername, setCurrentUsername] = useState<string | null>(null);
   const [setupPlayerNames, setSetupPlayerNames] = useState<string[]>([]);
@@ -117,7 +123,7 @@ export default function Home() {
   const [associateProfile, setAssociateProfile] = useState(true);
   const [competitionLocalSet, setCompetitionLocalSet] =
   useState<CompetitionLocalSet | null>(null);
-  
+  const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [isLoadingCompetitionSet, setIsLoadingCompetitionSet] =
   useState(false);
   const router = useRouter();
@@ -184,6 +190,7 @@ export default function Home() {
   const [currentLocalGameId, setCurrentLocalGameId] = useState<string | null>(null);
   const scoreOptions = selectedCell ? getScoreOptions(selectedCell.rowId) : [];
   const useSideLeaderboard = players.length <= 3;
+  
   const activeColumns =
   gameMode === "6cols"
   ? columns
@@ -198,50 +205,171 @@ export default function Home() {
 useEffect(() => {
   async function loadCurrentUser() {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    
-    setCurrentUserId(user?.id ?? null);
-    
-    if (!user) {
-      setCurrentUsername(null);
-      return;
+  data: { user },
+} = await supabase.auth.getUser();
+
+if (!user) {
+  setCurrentUserId(null);
+  setCurrentUsername(null);
+  setHomeStats(null);
+  return;
+}
+
+setCurrentUserId(user.id);
+
+    const [
+      { data: profile, error: profileError },
+      { data: stats, error: statsError },
+      { data: recentGames, error: recentGamesError },
+    ] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single(),
+
+      supabase
+        .from("profile_stats")
+        .select(`
+          games_played_3,
+          games_played_6,
+          wins_3,
+          wins_6,
+          games_2_players,
+          games_3_players,
+          games_4_players,
+          games_5_players,
+          games_6_players
+        `)
+        .eq("profile_id", user.id)
+        .maybeSingle(),
+
+      supabase
+  .from("local_game_players")
+  .select(`
+    final_rank,
+    local_games!inner (
+      status,
+      player_count,
+      created_at,
+      finished_at
+    )
+  `)
+  .eq("profile_id", user.id)
+  .eq("local_games.status", "finished")
+  .gte("local_games.player_count", 2)
+  .not("final_rank", "is", null),
+    ]);
+
+    if (profileError) {
+      console.error(
+        "Erreur chargement profil :",
+        profileError
+      );
     }
-    
-    const { data: profile } = await supabase
-    .from("profiles")
-    .select("username")
-    .eq("id", user.id)
-    .single();
-    
+
+    if (statsError) {
+      console.error(
+        "Erreur chargement statistiques :",
+        statsError
+      );
+    }
+
+    if (recentGamesError) {
+      console.error(
+        "Erreur chargement série actuelle :",
+        recentGamesError
+      );
+    }
+
     setCurrentUsername(profile?.username ?? null);
+
+    const gamesPlayed =
+      (stats?.games_played_3 ?? 0) +
+      (stats?.games_played_6 ?? 0);
+
+    const multiplayerGames =
+      (stats?.games_2_players ?? 0) +
+      (stats?.games_3_players ?? 0) +
+      (stats?.games_4_players ?? 0) +
+      (stats?.games_5_players ?? 0) +
+      (stats?.games_6_players ?? 0);
+
+    const multiplayerWins =
+      (stats?.wins_3 ?? 0) +
+      (stats?.wins_6 ?? 0);
+
+    const sortedRecentGames = [...(recentGames ?? [])].sort((a, b) => {
+  const gameA = Array.isArray(a.local_games)
+    ? a.local_games[0]
+    : a.local_games;
+
+  const gameB = Array.isArray(b.local_games)
+    ? b.local_games[0]
+    : b.local_games;
+
+  const dateA = new Date(
+    gameA?.finished_at ?? gameA?.created_at ?? 0
+  ).getTime();
+
+  const dateB = new Date(
+    gameB?.finished_at ?? gameB?.created_at ?? 0
+  ).getTime();
+
+  return dateB - dateA;
+});
+
+let currentWinStreak = 0;
+
+for (const game of sortedRecentGames) {
+  if (game.final_rank !== 1) {
+    break;
   }
-  
-  loadCurrentUser();
-  
+
+  currentWinStreak += 1;
+}
+
+    setHomeStats({
+      gamesPlayed,
+
+      winRate:
+        multiplayerGames > 0
+          ? Math.round(
+              (multiplayerWins / multiplayerGames) * 100
+            )
+          : 0,
+
+      currentWinStreak,
+    });
+  }
+
+  void loadCurrentUser();
+
   const {
     data: { subscription },
   } = supabase.auth.onAuthStateChange(() => {
-    loadCurrentUser();
+    void loadCurrentUser();
   });
-  
-  return () => subscription.unsubscribe();
+
+  return () => {
+    subscription.unsubscribe();
+  };
 }, []);
-useEffect(() => {
-  async function loadCompetitionLocalSet() {
-    const searchParams = new URLSearchParams(window.location.search);
-    
-    const competitionId = searchParams.get("competitionId");
-    const gameId = searchParams.get("gameId");
-    
-    if (!competitionId || !gameId) return;
-    
-    setIsLoadingCompetitionSet(true);
-    
-    const { data: game, error: gameError } = await supabase
-    .from("local_games")
-    .select(
-      `
+  useEffect(() => {
+    async function loadCompetitionLocalSet() {
+      const searchParams = new URLSearchParams(window.location.search);
+      
+      const competitionId = searchParams.get("competitionId");
+      const gameId = searchParams.get("gameId");
+      
+      if (!competitionId || !gameId) return;
+      
+      setIsLoadingCompetitionSet(true);
+      
+      const { data: game, error: gameError } = await supabase
+      .from("local_games")
+      .select(
+        `
         id,
         mode,
         player_count,
@@ -249,334 +377,334 @@ useEffect(() => {
         competition_id,
         competition_round_number
         `
-    )
-    .eq("id", gameId)
-    .eq("competition_id", competitionId)
-    .single();
-    
-    if (gameError || !game) {
-      console.error("Erreur chargement set local", {
-        message: gameError?.message,
-        details: gameError?.details,
-        hint: gameError?.hint,
-        code: gameError?.code,
-      });
+      )
+      .eq("id", gameId)
+      .eq("competition_id", competitionId)
+      .single();
       
-      alert("Impossible de charger ce set de compétition.");
-      setIsLoadingCompetitionSet(false);
-      return;
-    }
-    
-    const { data: gamePlayers, error: playersError } = await supabase
-    .from("local_game_players")
-    .select(
-      `
+      if (gameError || !game) {
+        console.error("Erreur chargement set local", {
+          message: gameError?.message,
+          details: gameError?.details,
+          hint: gameError?.hint,
+          code: gameError?.code,
+        });
+        
+        alert("Impossible de charger ce set de compétition.");
+        setIsLoadingCompetitionSet(false);
+        return;
+      }
+      
+      const { data: gamePlayers, error: playersError } = await supabase
+      .from("local_game_players")
+      .select(
+        `
     player_key,
     display_name,
     profile_id,
     player_order,
     competition_player_id
   `
-    )
-    .eq("game_id", gameId)
-    .order("player_order", { ascending: true });
-    
-    if (playersError || !gamePlayers || gamePlayers.length !== 2) {
-      console.error("Erreur chargement joueurs du set", playersError);
-      alert("Impossible de charger les joueurs de ce set.");
-      setIsLoadingCompetitionSet(false);
-      return;
-    }
-    const { data: competition, error: competitionError } =
-    await supabase
-    .from("competitions")
-    .select("competition_type, theme")
-    .eq("id", competitionId)
-    .single();
-    
-    if (competitionError || !competition) {
-      console.error("Erreur chargement compétition", {
-        message: competitionError?.message,
-        details: competitionError?.details,
-        hint: competitionError?.hint,
-        code: competitionError?.code,
-      });
-      
-      alert("Impossible de charger les informations de la compétition.");
-      setIsLoadingCompetitionSet(false);
-      return;
-    }
-    
-    const competitionPlayerIds = gamePlayers
-    .map((player) => player.competition_player_id)
-    .filter(
-      (id): id is string => Boolean(id)
-    );
-    
-    const {
-      data: competitionPlayers,
-      error: competitionPlayersError,
-    } = await supabase
-    .from("competition_players")
-    .select("id, player_order, sets_won")
-    .eq("competition_id", competitionId)
-    .in("id", competitionPlayerIds);
-    
-    if (
-      competitionPlayersError ||
-      !competitionPlayers ||
-      competitionPlayers.length !== 2
-    ) {
-      console.error(
-        "Erreur chargement joueurs de la rencontre",
-        {
-          error: competitionPlayersError,
-          competitionPlayerIds,
-          competitionType: competition.competition_type,
-        }
-      );
-      
-      alert(
-        "Impossible de charger les joueurs de cette rencontre."
-      );
-      
-      setIsLoadingCompetitionSet(false);
-      return;
-    }
-    const { data: savedScores, error: scoresError } = await supabase
-    .from("local_game_scores")
-    .select("player_key, column_id, row_id, value")
-    .eq("game_id", gameId);
-    
-    if (scoresError) {
-      console.error("Erreur chargement scores du set", scoresError);
-      setIsLoadingCompetitionSet(false);
-      return;
-    }
-    
-    const loadedPlayers: Player[] = gamePlayers.map((player) => ({
-      id: player.player_key,
-      name: player.display_name,
-      playerOrder: player.player_order,
-      linkedUserId: player.profile_id,
-    }));
-    
-    const loadedScores: Scores = {};
-    
-    for (const score of savedScores ?? []) {
-      const value: ScoreValue =
-      score.value === "X" ? "X" : Number(score.value);
-      
-      loadedScores[score.player_key] = {
-        ...loadedScores[score.player_key],
-        [score.column_id]: {
-          ...loadedScores[score.player_key]?.[score.column_id],
-          [score.row_id as YamRow]: value,
-        },
-      };
-    }
-    const setPlayer1CompetitionId =
-    gamePlayers.find((player) => player.player_order === 1)
-    ?.competition_player_id ?? null;
-    
-    const setPlayer2CompetitionId =
-    gamePlayers.find((player) => player.player_order === 2)
-    ?.competition_player_id ?? null;
-    
-    const setPlayer1Competition = competitionPlayers.find(
-      (player) => player.id === setPlayer1CompetitionId
-    );
-    
-    const setPlayer2Competition = competitionPlayers.find(
-      (player) => player.id === setPlayer2CompetitionId
-    );
-    const matchId = searchParams.get("matchId");
-    
-    let worldCupRoundNumber =
-    game.competition_round_number;
-    
-    let worldCupMatchNumber = 1;
-    
-    let isWorldCupSemiFinal = false;
-    let isWorldCupFinal = false;
-    
-    if (
-      competition.competition_type === "world_cup" &&
-      matchId
-    ) {
-      const {
-        data: worldCupMatch,
-        error: worldCupMatchError,
-      } = await supabase
-      .from("competition_matches")
-      .select(
-        "round_number, match_number, next_match_id"
       )
-      .eq("id", matchId)
+      .eq("game_id", gameId)
+      .order("player_order", { ascending: true });
+      
+      if (playersError || !gamePlayers || gamePlayers.length !== 2) {
+        console.error("Erreur chargement joueurs du set", playersError);
+        alert("Impossible de charger les joueurs de ce set.");
+        setIsLoadingCompetitionSet(false);
+        return;
+      }
+      const { data: competition, error: competitionError } =
+      await supabase
+      .from("competitions")
+      .select("competition_type, theme")
+      .eq("id", competitionId)
       .single();
       
-      if (worldCupMatchError || !worldCupMatch) {
+      if (competitionError || !competition) {
+        console.error("Erreur chargement compétition", {
+          message: competitionError?.message,
+          details: competitionError?.details,
+          hint: competitionError?.hint,
+          code: competitionError?.code,
+        });
+        
+        alert("Impossible de charger les informations de la compétition.");
+        setIsLoadingCompetitionSet(false);
+        return;
+      }
+      
+      const competitionPlayerIds = gamePlayers
+      .map((player) => player.competition_player_id)
+      .filter(
+        (id): id is string => Boolean(id)
+      );
+      
+      const {
+        data: competitionPlayers,
+        error: competitionPlayersError,
+      } = await supabase
+      .from("competition_players")
+      .select("id, player_order, sets_won")
+      .eq("competition_id", competitionId)
+      .in("id", competitionPlayerIds);
+      
+      if (
+        competitionPlayersError ||
+        !competitionPlayers ||
+        competitionPlayers.length !== 2
+      ) {
         console.error(
-          "Erreur chargement des informations du match",
-          worldCupMatchError
+          "Erreur chargement joueurs de la rencontre",
+          {
+            error: competitionPlayersError,
+            competitionPlayerIds,
+            competitionType: competition.competition_type,
+          }
         );
-      } else {
-        worldCupRoundNumber =
-        worldCupMatch.round_number;
         
-        worldCupMatchNumber =
-        worldCupMatch.match_number;
+        alert(
+          "Impossible de charger les joueurs de cette rencontre."
+        );
         
-        // Aucun match après celui-ci : c'est la finale.
-        isWorldCupFinal =
-        worldCupMatch.next_match_id === null;
+        setIsLoadingCompetitionSet(false);
+        return;
+      }
+      const { data: savedScores, error: scoresError } = await supabase
+      .from("local_game_scores")
+      .select("player_key, column_id, row_id, value")
+      .eq("game_id", gameId);
+      
+      if (scoresError) {
+        console.error("Erreur chargement scores du set", scoresError);
+        setIsLoadingCompetitionSet(false);
+        return;
+      }
+      
+      const loadedPlayers: Player[] = gamePlayers.map((player) => ({
+        id: player.player_key,
+        name: player.display_name,
+        playerOrder: player.player_order,
+        linkedUserId: player.profile_id,
+      }));
+      
+      const loadedScores: Scores = {};
+      
+      for (const score of savedScores ?? []) {
+        const value: ScoreValue =
+        score.value === "X" ? "X" : Number(score.value);
         
-        // Il existe un prochain match :
-        // on vérifie si ce prochain match est la finale.
-        if (worldCupMatch.next_match_id) {
-          const {
-            data: nextWorldCupMatch,
-            error: nextWorldCupMatchError,
-          } = await supabase
-          .from("competition_matches")
-          .select("next_match_id")
-          .eq("id", worldCupMatch.next_match_id)
-          .single();
+        loadedScores[score.player_key] = {
+          ...loadedScores[score.player_key],
+          [score.column_id]: {
+            ...loadedScores[score.player_key]?.[score.column_id],
+            [score.row_id as YamRow]: value,
+          },
+        };
+      }
+      const setPlayer1CompetitionId =
+      gamePlayers.find((player) => player.player_order === 1)
+      ?.competition_player_id ?? null;
+      
+      const setPlayer2CompetitionId =
+      gamePlayers.find((player) => player.player_order === 2)
+      ?.competition_player_id ?? null;
+      
+      const setPlayer1Competition = competitionPlayers.find(
+        (player) => player.id === setPlayer1CompetitionId
+      );
+      
+      const setPlayer2Competition = competitionPlayers.find(
+        (player) => player.id === setPlayer2CompetitionId
+      );
+      const matchId = searchParams.get("matchId");
+      
+      let worldCupRoundNumber =
+      game.competition_round_number;
+      
+      let worldCupMatchNumber = 1;
+      
+      let isWorldCupSemiFinal = false;
+      let isWorldCupFinal = false;
+      
+      if (
+        competition.competition_type === "world_cup" &&
+        matchId
+      ) {
+        const {
+          data: worldCupMatch,
+          error: worldCupMatchError,
+        } = await supabase
+        .from("competition_matches")
+        .select(
+          "round_number, match_number, next_match_id"
+        )
+        .eq("id", matchId)
+        .single();
+        
+        if (worldCupMatchError || !worldCupMatch) {
+          console.error(
+            "Erreur chargement des informations du match",
+            worldCupMatchError
+          );
+        } else {
+          worldCupRoundNumber =
+          worldCupMatch.round_number;
           
-          if (nextWorldCupMatchError) {
-            console.error(
-              "Erreur chargement du prochain match",
-              nextWorldCupMatchError
-            );
-          } else {
-            isWorldCupSemiFinal =
-            nextWorldCupMatch?.next_match_id === null;
+          worldCupMatchNumber =
+          worldCupMatch.match_number;
+          
+          // Aucun match après celui-ci : c'est la finale.
+          isWorldCupFinal =
+          worldCupMatch.next_match_id === null;
+          
+          // Il existe un prochain match :
+          // on vérifie si ce prochain match est la finale.
+          if (worldCupMatch.next_match_id) {
+            const {
+              data: nextWorldCupMatch,
+              error: nextWorldCupMatchError,
+            } = await supabase
+            .from("competition_matches")
+            .select("next_match_id")
+            .eq("id", worldCupMatch.next_match_id)
+            .single();
+            
+            if (nextWorldCupMatchError) {
+              console.error(
+                "Erreur chargement du prochain match",
+                nextWorldCupMatchError
+              );
+            } else {
+              isWorldCupSemiFinal =
+              nextWorldCupMatch?.next_match_id === null;
+            }
           }
         }
       }
+      setCompetitionLocalSet({
+        competitionId,
+        
+        competitionType:
+        competition.competition_type as
+        | "grand_slam_final"
+        | "world_cup",
+        
+        matchId,
+        isWorldCupSemiFinal,
+        isWorldCupFinal,
+        matchNumber: worldCupMatchNumber,
+        
+        gameId,
+        
+        roundNumber:
+        competition.competition_type === "world_cup"
+        ? worldCupRoundNumber
+        : game.competition_round_number,
+        
+        theme: competition.theme,
+        
+        tournamentName:
+        competition.competition_type === "world_cup"
+        ? "Coupe du Monde"
+        : getTournamentName(competition.theme),
+        
+        player1SetsWon:
+        competition.competition_type === "grand_slam_final"
+        ? setPlayer1Competition?.sets_won ?? 0
+        : 0,
+        
+        player2SetsWon:
+        competition.competition_type === "grand_slam_final"
+        ? setPlayer2Competition?.sets_won ?? 0
+        : 0,
+      });
+      setCurrentLocalGameId(gameId);
+      setPartyMode("local");
+      setPlayerCount(2);
+      setGameMode(game.mode);
+      setPlayers(loadedPlayers);
+      setScores(loadedScores);
+      setFinishedGameSaved(false);
+      setHasSavedGame(false);
+      setScreen("game");
+      setIsLoadingCompetitionSet(false);
     }
-    setCompetitionLocalSet({
-      competitionId,
-      
-      competitionType:
-      competition.competition_type as
-      | "grand_slam_final"
-      | "world_cup",
-      
-      matchId,
-      isWorldCupSemiFinal,
-      isWorldCupFinal,
-      matchNumber: worldCupMatchNumber,
-      
-      gameId,
-      
-      roundNumber:
-      competition.competition_type === "world_cup"
-      ? worldCupRoundNumber
-      : game.competition_round_number,
-      
-      theme: competition.theme,
-      
-      tournamentName:
-      competition.competition_type === "world_cup"
-      ? "Coupe du Monde"
-      : getTournamentName(competition.theme),
-      
-      player1SetsWon:
-      competition.competition_type === "grand_slam_final"
-      ? setPlayer1Competition?.sets_won ?? 0
-      : 0,
-      
-      player2SetsWon:
-      competition.competition_type === "grand_slam_final"
-      ? setPlayer2Competition?.sets_won ?? 0
-      : 0,
+    
+    void loadCompetitionLocalSet();
+  }, []);
+  useEffect(() => {
+    updateSavedGameInfo();
+  }, []);
+  
+  async function createPlayerLinkToken(playerKey: string) {
+    if (!currentUserId) {
+      alert("Tu dois être connecté pour ajouter un autre profil.");
+      return;
+    }
+    
+    const token = crypto.randomUUID();
+    
+    const expiresAt = new Date();
+    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+    
+    const { error } = await supabase.from("player_link_tokens").insert({
+      token,
+      host_user_id: currentUserId,
+      target_player_key: playerKey,
+      status: "pending",
+      player_count: playerCount,
+      expires_at: expiresAt.toISOString(),
     });
-    setCurrentLocalGameId(gameId);
-    setPartyMode("local");
-    setPlayerCount(2);
-    setGameMode(game.mode);
-    setPlayers(loadedPlayers);
-    setScores(loadedScores);
-    setFinishedGameSaved(false);
-    setHasSavedGame(false);
-    setScreen("game");
-    setIsLoadingCompetitionSet(false);
-  }
-  
-  void loadCompetitionLocalSet();
-}, []);
-useEffect(() => {
-  updateSavedGameInfo();
-}, []);
-
-async function createPlayerLinkToken(playerKey: string) {
-  if (!currentUserId) {
-    alert("Tu dois être connecté pour ajouter un autre profil.");
-    return;
-  }
-  
-  const token = crypto.randomUUID();
-  
-  const expiresAt = new Date();
-  expiresAt.setMinutes(expiresAt.getMinutes() + 15);
-  
-  const { error } = await supabase.from("player_link_tokens").insert({
-    token,
-    host_user_id: currentUserId,
-    target_player_key: playerKey,
-    status: "pending",
-    player_count: playerCount,
-    expires_at: expiresAt.toISOString(),
-  });
-  
-  if (error) {
-    alert(error.message);
-    return;
-  }
-  
-  setLinkToken(token);
-  setLinkUrl(`${window.location.origin}/link-player/${token}`);
-}
-function applyClaimedProfileToSetup({
-  playerKey,
-  userId,
-  username,
-  avatarUrl,
-}: {
-  playerKey: string;
-  userId: string;
-  username: string;
-  avatarUrl?: string | null;
-}) {
-  const playerIndex = Number(playerKey.replace("player-", "")) - 1;
-  
-  setLinkedProfiles((current) => {
-    // Si la place est déjà prise par un autre profil, on ne remplace pas
-    if (current[playerKey] && current[playerKey].userId !== userId) {
-      console.log("Place déjà prise, association ignorée :", playerKey);
-      return current;
+    
+    if (error) {
+      alert(error.message);
+      return;
     }
     
-    return {
-      ...current,
-      [playerKey]: {
-        userId,
-        username,
-        avatarUrl,
-      },
-    };
-  });
-  
-  setSetupPlayerNames((current) =>
-    Array.from({ length: playerCount }, (_, index) => {
-    if (index === playerIndex) {
-      return username.charAt(0).toUpperCase() + username.slice(1);
-    }
+    setLinkToken(token);
+    setLinkUrl(`${window.location.origin}/link-player/${token}`);
+  }
+  function applyClaimedProfileToSetup({
+    playerKey,
+    userId,
+    username,
+    avatarUrl,
+  }: {
+    playerKey: string;
+    userId: string;
+    username: string;
+    avatarUrl?: string | null;
+  }) {
+    const playerIndex = Number(playerKey.replace("player-", "")) - 1;
     
-    return current[index] ?? `Joueur ${index + 1}`;
-  })
-);
+    setLinkedProfiles((current) => {
+      // Si la place est déjà prise par un autre profil, on ne remplace pas
+      if (current[playerKey] && current[playerKey].userId !== userId) {
+        console.log("Place déjà prise, association ignorée :", playerKey);
+        return current;
+      }
+      
+      return {
+        ...current,
+        [playerKey]: {
+          userId,
+          username,
+          avatarUrl,
+        },
+      };
+    });
+    
+    setSetupPlayerNames((current) =>
+      Array.from({ length: playerCount }, (_, index) => {
+      if (index === playerIndex) {
+        return username.charAt(0).toUpperCase() + username.slice(1);
+      }
+      
+      return current[index] ?? `Joueur ${index + 1}`;
+    })
+  );
 }
 useEffect(() => {
   if (!linkToken) return;
@@ -1002,25 +1130,25 @@ function getNewUnlockedBadges(beforeStats: any, afterStats: any) {
   return achievementDefinitions.flatMap((definition) => {
     const beforeValue = beforeStats?.[definition.metric] ?? 0;
     const afterValue = afterStats?.[definition.metric] ?? 0;
-
+    
     const beforeUnlocked = getUnlockedMilestoneIndexes(
       beforeValue,
       definition.milestones
     );
-
+    
     const afterUnlocked = getUnlockedMilestoneIndexes(
       afterValue,
       definition.milestones
     );
-
+    
     return afterUnlocked
-      .filter((index) => !beforeUnlocked.includes(index))
-      .map((index) => ({
-        id: definition.id,
-        label: definition.label,
-        milestone: definition.milestones[index],
-        xp: definition.xpRewards?.[index] ?? BADGE_XP[index] ?? 0,
-      }));
+    .filter((index) => !beforeUnlocked.includes(index))
+    .map((index) => ({
+      id: definition.id,
+      label: definition.label,
+      milestone: definition.milestones[index],
+      xp: definition.xpRewards?.[index] ?? BADGE_XP[index] ?? 0,
+    }));
   });
 }
 function getBaseXpGain(playerId: string, rank: number) {
@@ -1799,9 +1927,9 @@ for (const player of leaderboard) {
     });
   }
   const statsAfter = await getProfileStatsForGamePlayer(
-  createdGameId,
-  player.linkedUserId
-);
+    createdGameId,
+    player.linkedUserId
+  );
   
   const potentialBadges = getNewUnlockedBadges(statsBefore, statsAfter);
   
@@ -1980,6 +2108,15 @@ return (
     onQuickGame={() => setScreen("home")}
     onSpecialModes={() => router.push("/modes-speciaux")}
     onRules={() => router.push("/regles")}
+    hasSavedGame={hasSavedGame}
+    savedGameInfo={savedGameInfo}
+    onResumeGame={resumeGame}
+    homeStats={homeStats}
+    onProfile={() => router.push("/profile?tab=dashboard")}
+  onAchievements={() => router.push("/profile?tab=achievements")}
+  onHistory={() => router.push("/profile?tab=history")}
+  isLoggedIn={Boolean(currentUserId)}
+ 
     />
   )}
   {screen === "home" && (
@@ -3130,175 +3267,469 @@ function HomeMenu({
   onQuickGame,
   onSpecialModes,
   onRules,
+  hasSavedGame,
+  savedGameInfo,
+  onResumeGame,
+  homeStats,
+  onProfile,
+  onAchievements,
+  onHistory,
+  isLoggedIn,
 }: {
   onQuickGame: () => void;
   onSpecialModes: () => void;
   onRules: () => void;
+  hasSavedGame: boolean;
+  savedGameInfo: {
+    playerCount: number;
+    mode: string;
+    remainingTurns: number;
+   
+  } | null;
+  onResumeGame: () => void;
+  homeStats: HomeStats | null;
+   onProfile: () => void;
+  onAchievements: () => void;
+  onHistory: () => void;
+  isLoggedIn: boolean;
 }) {
+  const [showSpecialModesModal, setShowSpecialModesModal] =
+  useState(false);
   return (
-    <section className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-10">
-    
+    <section className="relative min-h-dvh overflow-hidden bg-black px-4 py-8 text-white sm:px-6 lg:px-10">
     <AuthButton />
     
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.04]">
+    {/* Dé géant en arrière-plan */}
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden">
     <Image
     src="/favicon.png"
     alt=""
-    width={1000}
-    height={1000}
+    width={1100}
+    height={1100}
     priority
-    className="rotate-[-12deg] select-none"
+    className="translate-y-10 rotate-[-14deg] select-none opacity-[0.035]"
     />
     </div>
     
-    <div className="relative z-10 w-full max-w-5xl">
-    <div className="text-center">
+    {/* Halo central */}
+    <div className="pointer-events-none absolute left-1/2 top-32 h-[500px] w-[900px] -translate-x-1/2 rounded-full bg-amber-500/[0.035] blur-[120px]" />
+    
+    <div className="relative z-10 mx-auto w-full max-w-6xl">
+    {/* Hero */}
+    <div className="flex flex-col items-center text-center">
     <Image
     src="/favicon.png"
     alt="YamScore"
-    width={110}
-    height={110}
+    width={105}
+    height={105}
     priority
-    className="mx-auto"
+    className="drop-shadow-[0_20px_35px_rgba(255,255,255,0.12)]"
     />
     
-    <h1 className="mt-4 text-5xl font-black sm:text-7xl">
+    <h1 className="mt-2 text-5xl font-black tracking-tight sm:text-6xl lg:text-7xl">
     YamScore
     </h1>
     
-    <p className="mt-3 text-lg font-bold text-slate-400">
-    Choisis comment tu veux jouer
+    <p className="mt-3 text-base font-semibold text-slate-400 sm:text-lg">
+    Le compteur de score ultime pour tes parties de Yam.
     </p>
+    {homeStats && (
+  <div className="mt-6 grid w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#101010]/90 shadow-2xl sm:grid-cols-3">
+    {/* Parties */}
+    <div className="flex min-h-[78px] items-center justify-center gap-3 px-5 py-4">
+      <span className="text-2xl">🎲</span>
+
+      <span className="text-base font-black text-white">
+        {homeStats.gamesPlayed}{" "}
+        {homeStats.gamesPlayed > 1 ? "parties" : "partie"}
+      </span>
+    </div>
+
+    {/* Victoires */}
+    <div className="flex min-h-[78px] items-center justify-center gap-3 border-t border-white/10 px-5 py-4 sm:border-l sm:border-t-0">
+      <span className="text-2xl">🏆</span>
+
+      <div className="flex flex-col items-start">
+        <span className="text-base font-black leading-none text-white">
+          {homeStats.winRate} % de victoires
+        </span>
+
+        <span className="mt-2 text-xs font-bold text-slate-500">
+          Parties à 2 joueurs et +
+        </span>
+      </div>
+    </div>
+
+    {/* Série */}
+    <div className="flex min-h-[78px] items-center justify-center gap-3 border-t border-white/10 px-5 py-4 sm:border-l sm:border-t-0">
+      <span className="text-2xl">🔥</span>
+
+      <div className="flex flex-col items-start">
+        <span className="text-base font-black leading-none text-white">
+          Série actuelle : {homeStats.currentWinStreak ?? 0}
+        </span>
+
+        <span className="mt-2 text-xs font-bold text-slate-500">
+          Parties à 2 joueurs et +
+        </span>
+      </div>
+    </div>
+  </div>
+)}
     </div>
     
-    <div className="mt-10 grid gap-5 md:grid-cols-3">
-    <HomeMenuCard
-    icon="🎲"
-    title="Partie rapide"
-    description="Lance une partie classique en local ou en Salon."
-    buttonLabel="Jouer"
-    onClick={onQuickGame}
-    variant="quick"
-    />
-    
-    <HomeMenuCard
-    icon="🏆"
-    title="Modes spéciaux"
-    description="Joue des finales et découvre les formats compétitifs."
-    buttonLabel="Découvrir"
-    onClick={onSpecialModes}
-    variant="special"
-    />
-    
-    <HomeMenuCard
-    icon="📖"
-    title="Règles"
-    description="Consulte les règles, les figures et le fonctionnement des colonnes."
-    buttonLabel="Voir les règles"
-    onClick={onRules}
-    variant="rules"
-    />
-    </div>
-    </div>
-    </section>
-  );
-}
-function HomeMenuCard({
-  icon,
-  title,
-  description,
-  buttonLabel,
-  onClick,
-  variant,
-}: {
-  icon: string;
-  title: string;
-  description: string;
-  buttonLabel: string;
-  onClick: () => void;
-  variant: "quick" | "special" | "rules";
-}) {
-  const styles = {
-    quick: {
-      border: "border-[#C44934]/70 hover:border-[#C44934]",
-      icon: "bg-[#C44934]/20",
-      iconText: "text-[#E86650]",
-      button:
-      "bg-[#C44934] text-white group-hover:bg-[#D75A43]",
-      glow: "hover:shadow-[0_18px_60px_rgba(196,73,52,0.18)]",
-    },
-    special: {
-      border: "border-[#9B6A28]/70 hover:border-[#D29A3A]",
-      icon: "bg-[#9B6A28]/20",
-      iconText: "text-[#E6B65D]",
-      button:
-      "bg-[#9B6A28] text-white group-hover:bg-[#B67D2B]",
-      glow: "hover:shadow-[0_18px_60px_rgba(155,106,40,0.18)]",
-    },
-    rules: {
-      border: "border-slate-700 hover:border-slate-400",
-      icon: "bg-slate-700/30",
-      iconText: "text-slate-200",
-      button:
-      "bg-slate-700 text-white group-hover:bg-slate-600",
-      glow: "hover:shadow-[0_18px_60px_rgba(148,163,184,0.12)]",
-    },
-  }[variant];
-  
-  return (
-    <button
+    {/* Actions principales */}
+<div className="mt-10 grid items-stretch gap-6 lg:grid-cols-2">
+  {/* Partie rapide */}
+  <button
     type="button"
-    onClick={onClick}
-    className={[
-      "group flex min-h-[320px] flex-col rounded-3xl border bg-[#111111] p-6 text-left text-white shadow-2xl transition duration-200",
-      "hover:-translate-y-1 hover:scale-[1.01]",
-      styles.border,
-      styles.glow,
-    ].join(" ")}
-    >
-    <div
-    className={[
-      "flex h-16 w-16 items-center justify-center rounded-2xl text-3xl",
-      styles.icon,
-      styles.iconText,
-    ].join(" ")}
-    >
-    {icon}
+    onClick={onQuickGame}
+    className="group relative flex h-full flex-col overflow-hidden rounded-[28px] border border-[#C44934]/80 bg-[#100C0B]/95 p-6 text-left shadow-2xl transition duration-300 hover:-translate-y-1 hover:border-[#E65F47] hover:shadow-[0_22px_70px_rgba(196,73,52,0.18)] sm:p-8"
+  >
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(196,73,52,0.14),transparent_45%)]" />
+
+    <div className="relative flex h-full flex-col">
+      <div className="flex min-h-[108px] items-start gap-5">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#C44934]/50 bg-[#C44934]/10 text-4xl shadow-inner">
+          🎲
+        </div>
+
+        <div>
+          <h2 className="text-3xl font-black">
+            Partie rapide
+          </h2>
+
+          <p className="mt-2 max-w-md text-base font-semibold leading-7 text-slate-400">
+            Lance une partie classique en local ou en Salon.
+          </p>
+        </div>
+      </div>
+
+      {/* Zone centrale */}
+      <div className="mt-7 flex flex-1 items-stretch">
+        <div className="grid min-h-[130px] w-full overflow-hidden rounded-2xl border border-[#C44934]/25 bg-black/30 sm:grid-cols-2">
+          <div className="flex items-center gap-4 px-5 py-5">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
+              🏠
+            </div>
+
+            <div>
+              <div className="font-black uppercase tracking-wide text-[#F06A52]">
+                Local
+              </div>
+
+              <div className="mt-1 text-sm font-medium text-slate-400">
+                Un joueur note tout
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-[#C44934]/20 sm:border-l sm:border-t-0">
+            <div className="flex h-full items-center gap-4 px-5 py-5">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
+                👥
+              </div>
+
+              <div>
+                <div className="font-black uppercase tracking-wide text-[#F06A52]">
+                  Salon
+                </div>
+
+                <div className="mt-1 text-sm font-medium text-slate-400">
+                  Chacun note sur son téléphone
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#C44934] px-5 py-4 font-black transition group-hover:bg-[#D95841]">
+        <span>Configurer ma partie</span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
+  <span className="text-lg">▶</span>
+</div>
+      </div>
     </div>
-    
-    <h2 className="mt-6 text-2xl font-black">{title}</h2>
-    
-    <p className="mt-3 flex-1 font-bold leading-relaxed text-slate-400">
-    {description}
-    </p>
-    
-    <div
-    className={[
-      "mt-6 flex w-full items-center justify-between rounded-xl px-4 py-3 font-black transition",
-      styles.button,
-    ].join(" ")}
-    >
-    <span>{buttonLabel}</span>
-    <span className="transition group-hover:translate-x-1">→</span>
+  </button>
+
+  {/* Modes spéciaux */}
+  <button
+    type="button"
+    onClick={() => {
+  if (!isLoggedIn) {
+    setShowSpecialModesModal(true);
+    return;
+  }
+
+  onSpecialModes();
+}}
+    className="group relative flex h-full flex-col overflow-hidden rounded-[28px] border border-[#B98224]/80 bg-[#100E09]/95 p-6 text-left shadow-2xl transition duration-300 hover:-translate-y-1 hover:border-[#E1A83E] hover:shadow-[0_22px_70px_rgba(185,130,36,0.18)] sm:p-8"
+  >
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(185,130,36,0.14),transparent_45%)]" />
+
+    <div className="relative flex h-full flex-col">
+      <div className="flex min-h-[108px] items-start gap-5">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#B98224]/50 bg-[#B98224]/10 text-4xl shadow-inner">
+          🏆
+        </div>
+
+        <div>
+          <h2 className="text-3xl font-black">
+            Modes spéciaux
+          </h2>
+
+          <p className="mt-2 max-w-md text-base font-semibold leading-7 text-slate-400">
+            Joue des compétitions et découvre de nouveaux formats.
+          </p>
+        </div>
+      </div>
+
+      {/* Zone centrale */}
+      <div className="mt-7 flex flex-1 items-stretch">
+        <div className="grid min-h-[130px] w-full grid-cols-3 gap-3">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
+            <span className="text-3xl">🎾</span>
+            <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
+              Grand Chelem
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
+            <span className="text-3xl">⚽</span>
+            <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
+              Coupe du monde
+            </span>
+          </div>
+
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/30 px-2 py-4 text-center">
+            <span className="text-3xl opacity-70">🔒</span>
+            <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black text-slate-400 sm:text-base">
+              À venir...
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#A77322] px-5 py-4 font-black transition group-hover:bg-[#BD8628]">
+        <span>Découvrir les modes</span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
+  <span className="text-lg">▶</span>
+</div>
+      </div>
     </div>
-    </button>
-  );
-}
-function getWorldCupRoundLabel(
-  roundNumber: number,
-  matchNumber: number
-) {
-  if (roundNumber === 1) {
-    return `Quart de finale ${matchNumber}`;
+  </button>
+</div>
+    
+    {/* Partie locale sauvegardée */}
+    <div
+  className={[
+    "mt-6 grid gap-5",
+    isLoggedIn
+      ? "lg:grid-cols-[380px_1fr]"
+      : "lg:grid-cols-[1000px_1fr]",
+  ].join(" ")}
+>
+  {/* Partie en cours */}
+  <div className="rounded-2xl border border-white/10 bg-[#101010]/90 p-5 shadow-2xl">
+    {hasSavedGame && savedGameInfo ? (
+      <div className="flex h-full flex-col justify-between gap-5">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
+            📋
+          </div>
+
+          <div>
+            <div className="text-base font-black text-[#F06A52]">
+              Continuer la partie
+            </div>
+
+            <div className="mt-2 text-sm font-bold text-white">
+              {savedGameInfo.mode} · {savedGameInfo.playerCount}{" "}
+              {savedGameInfo.playerCount > 1 ? "joueurs" : "joueur"}
+            </div>
+
+            <div className="mt-1 text-xs font-semibold text-slate-500">
+              {savedGameInfo.remainingTurns}{" "}
+              {savedGameInfo.remainingTurns > 1
+                ? "tours restants"
+                : "tour restant"}
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onResumeGame}
+          className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C44934] px-6 font-black text-white transition hover:bg-[#D95841]"
+        >
+          <span>▶</span>
+          Reprendre
+        </button>
+      </div>
+    ) : (
+      <div className="flex h-full items-center gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5 text-2xl">
+          💾
+        </div>
+
+        <div>
+          <div className="text-base font-black text-white">
+            Aucune partie en cours
+          </div>
+
+          <div className="mt-1 text-sm font-medium text-slate-500">
+            Lance une partie rapide pour commencer.
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+
+  {/* Navigation secondaire */}
+  
+  <div
+  className={[
+    "grid gap-4",
+    isLoggedIn
+      ? "grid-cols-2 sm:grid-cols-4"
+      : "grid-cols-1 justify-items-start",
+  ].join(" ")}
+>
+  {isLoggedIn && (
+    <>
+      <button
+        type="button"
+        onClick={onProfile}
+        className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-blue-500/50 hover:bg-[#151A22]"
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-2xl">
+          📊
+        </div>
+
+        <div className="mt-3 font-black text-white">
+          Profil
+        </div>
+
+        <div className="mt-1 text-xs font-medium text-slate-500">
+          Voir mes stats
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={onAchievements}
+        className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-purple-500/50 hover:bg-[#151A22]"
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-purple-500/20 bg-purple-500/10 text-2xl">
+          🏅
+        </div>
+
+        <div className="mt-3 font-black text-white">
+          Succès
+        </div>
+
+        <div className="mt-1 text-xs font-medium text-slate-500">
+          Voir mes succès
+        </div>
+      </button>
+
+      <button
+        type="button"
+        onClick={onHistory}
+        className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-green-500/50 hover:bg-[#151A22]"
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-green-500/20 bg-green-500/10 text-2xl">
+          🕘
+        </div>
+
+        <div className="mt-3 font-black text-white">
+          Historique
+        </div>
+
+        <div className="mt-1 text-xs font-medium text-slate-500">
+          Mes parties
+        </div>
+      </button>
+    </>
+  )}
+
+  <button
+    type="button"
+    onClick={onRules}
+    className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-blue-400/50 hover:bg-[#151A22]"
+  >
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-400/10 text-2xl">
+      📖
+    </div>
+
+    <div className="mt-3 font-black text-white">
+      Règles
+    </div>
+
+    <div className="mt-1 text-xs font-medium text-slate-500">
+      Apprendre à jouer
+    </div>
+  </button>
+</div>
+</div>
+      </div>
+      {showSpecialModesModal && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
+    onClick={() => setShowSpecialModesModal(false)}
+  >
+    <div
+      className="w-full max-w-md rounded-3xl border border-[#B98224]/60 bg-[#111111] p-7 text-center shadow-2xl"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#B98224]/40 bg-[#B98224]/10 text-4xl">
+        🏆
+      </div>
+
+      <h2 className="mt-5 text-2xl font-black text-white">
+        Connecte-toi pour en profiter
+      </h2>
+
+      <p className="mt-3 text-sm font-semibold leading-6 text-slate-400">
+        Les modes spéciaux nécessitent un profil YamScore pour
+        sauvegarder tes compétitions et ta progression.
+      </p>
+
+      <p className="mt-3 text-sm font-bold text-[#D6A14A]">
+        Utilise le bouton de connexion en haut à droite.
+      </p>
+
+      <button
+        type="button"
+        onClick={() => setShowSpecialModesModal(false)}
+        className="mt-6 w-full rounded-xl bg-[#A77322] px-5 py-3 font-black text-white transition hover:bg-[#BD8628]"
+      >
+        Compris
+      </button>
+    </div>
+  </div>
+)}
+      </section>
+    );
+    
   }
   
-  if (roundNumber === 2) {
-    return `Demi-finale ${matchNumber}`;
+  function getWorldCupRoundLabel(
+    roundNumber: number,
+    matchNumber: number
+  ) {
+    if (roundNumber === 1) {
+      return `Quart de finale ${matchNumber}`;
+    }
+    
+    if (roundNumber === 2) {
+      return `Demi-finale ${matchNumber}`;
+    }
+    
+    if (roundNumber === 3) {
+      return "Finale";
+    }
+    
+    return `Tour ${roundNumber}`;
   }
-  
-  if (roundNumber === 3) {
-    return "Finale";
-  }
-  
-  return `Tour ${roundNumber}`;
-}

@@ -3,7 +3,11 @@
 import { useEffect, useState } from "react";
 import { supabase, ensureUserProfile } from "../lib/supabase";
 import { useRouter } from "next/navigation";
-
+import {
+  getLevelFromTotalXp,
+  getXpIntoCurrentLevel,
+  getXpNeededForCurrentLevel,
+} from "../lib/levelRules";
 export default function AuthButton() {
   const router = useRouter();
   
@@ -18,7 +22,8 @@ export default function AuthButton() {
   
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
+  const [level, setLevel] = useState(1);
+const [xpPercent, setXpPercent] = useState(0);
   const [usernameInput, setUsernameInput] = useState("");
   const [usernameError, setUsernameError] = useState("");
   
@@ -33,16 +38,29 @@ export default function AuthButton() {
       setAvatarUrl(null);
       setUsername(null);
       setUsernameModalOpen(false);
+      setLevel(1);
+setXpPercent(0);
       return;
     }
     
     const ensuredProfile = await ensureUserProfile();
     
-    const { data: profileData } = await supabase
+    const [
+  { data: profileData },
+  { data: progressData },
+] = await Promise.all([
+  supabase
     .from("profiles")
     .select("username, display_name, avatar_url")
     .eq("id", user.id)
-    .single();
+    .single(),
+
+  supabase
+    .from("profile_progress")
+    .select("total_xp")
+    .eq("profile_id", user.id)
+    .maybeSingle(),
+]);
     
     const nextDisplayName =
     profileData?.display_name ||
@@ -57,11 +75,33 @@ export default function AuthButton() {
     ensuredProfile?.avatarUrl ||
     user.user_metadata?.avatar_url ||
     null;
-    
+    const totalXp = progressData?.total_xp ?? 0;
+
+const nextLevel = getLevelFromTotalXp(totalXp);
+
+const xpIntoCurrentLevel =
+  getXpIntoCurrentLevel(totalXp);
+
+const xpNeededForCurrentLevel =
+  getXpNeededForCurrentLevel(nextLevel);
+
+const nextXpPercent =
+  xpNeededForCurrentLevel > 0
+    ? Math.min(
+        100,
+        Math.round(
+          (xpIntoCurrentLevel /
+            xpNeededForCurrentLevel) *
+            100
+        )
+      )
+    : 100;
     setUserId(user.id);
     setDisplayName(nextDisplayName);
     setAvatarUrl(nextAvatarUrl);
     setUsername(profileData?.username ?? null);
+    setLevel(nextLevel);
+setXpPercent(nextXpPercent);
     setUsernameModalOpen(!profileData?.username);
   }
   
@@ -148,6 +188,8 @@ export default function AuthButton() {
     setUsername(null);
     setUsernameModalOpen(false);
     setMenuOpen(false);
+    setLevel(1);
+setXpPercent(0);
   }
   
   async function saveUsername() {
@@ -183,30 +225,52 @@ export default function AuthButton() {
     {displayName ? (
       <div className="absolute right-4 top-4 z-40">
       <button
-      onClick={() => setMenuOpen((current) => !current)}
-      className="flex items-center gap-3 rounded-2xl border border-[#9B6A28]/50 bg-[#241A13] hover:bg-[#322217] px-3 py-2 transition"
-      >
-      {avatarUrl ? (
-        <img
-        src={avatarUrl}
-        alt=""
-        className="h-8 w-8 rounded-full border border-white/20"
+  type="button"
+  onClick={() => setMenuOpen((current) => !current)}
+  className="flex min-w-[220px] items-center gap-3 rounded-2xl border border-white/10 bg-[#101010]/95 px-3 py-2.5 text-left shadow-xl transition hover:border-[#9B6A28]/60 hover:bg-[#171717]"
+>
+  {avatarUrl ? (
+    <img
+      src={avatarUrl}
+      alt=""
+      className="h-10 w-10 shrink-0 rounded-full border border-[#D6A14A]/60 object-cover"
+    />
+  ) : (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6A14A]/60 bg-[#C44934] text-sm">
+      👤
+    </div>
+  )}
+
+  <div className="hidden min-w-0 flex-1 sm:block">
+    <div className="truncate text-sm font-black text-white">
+      {displayName}
+    </div>
+
+    <div className="mt-1 flex items-center gap-2">
+      <span className="shrink-0 text-[10px] font-bold text-slate-400">
+        Niveau {level}
+      </span>
+
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-[#D6A14A] transition-all duration-500"
+          style={{
+            width: `${xpPercent}%`,
+          }}
         />
-      ) : (
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#C44934] text-sm">
-        👤
-        </div>
-      )}
-      
-      <div className="hidden text-left sm:block">
-      <div className="text-sm font-black text-white">{displayName}</div>
-      <div className="text-xs font-bold text-[#C44934]">
-      @{username || "pseudo"}
       </div>
-      </div>
-      
-      <span className="text-xs text-[#C44934]">▼</span>
-      </button>
+    </div>
+  </div>
+
+  <span
+    className={[
+      "text-sm text-slate-400 transition-transform",
+      menuOpen ? "rotate-180" : "",
+    ].join(" ")}
+  >
+   ⌄
+  </span>
+</button>
       
       {menuOpen && (
         <div className="mt-2 w-56 rounded-2xl border border-[#9B6A28]/50 bg-black p-2 shadow-2xl">
@@ -235,11 +299,28 @@ export default function AuthButton() {
       </div>
     ) : (
       <button
-      onClick={() => setAuthModalOpen(true)}
-      className="absolute right-5 top-5 z-40 rounded-2xl border border-[#9B6A28]/50 bg-[#241A13] px-4 py-3 font-black text-white transition hover:bg-[#322217]"
-      >
-      👤 Se connecter
-      </button>
+  type="button"
+  onClick={() => setAuthModalOpen(true)}
+  className="absolute right-4 top-4 z-40 flex min-w-[220px] items-center gap-3 rounded-2xl border border-white/10 bg-[#101010]/95 px-3 py-2.5 text-left shadow-xl transition hover:border-[#9B6A28]/60 hover:bg-[#171717]"
+>
+  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#D6A14A]/50 bg-[#C44934]/15 text-lg">
+    👤
+  </div>
+
+  <div className="hidden min-w-0 flex-1 sm:block">
+    <div className="text-sm font-black text-white">
+      Se connecter
+    </div>
+
+    <div className="mt-1 text-[11px] font-bold text-slate-400">
+      Retrouve ton profil et ta progression
+    </div>
+  </div>
+
+  <span className="text-sm text-slate-400">
+    ›
+  </span>
+</button>
     )}
     
     {authModalOpen && (

@@ -158,7 +158,7 @@ type GameHistoryItem = {
 
 export default function ProfilePage() {
   const router = useRouter();
-  
+
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [achievementStats, setAchievementStats] = useState<any>(null);
@@ -182,7 +182,8 @@ export default function ProfilePage() {
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
-  const [activeTab, setActiveTab] = useState<ProfileTab>("dashboard");
+ const [activeTab, setActiveTab] =
+  useState<ProfileTab>("dashboard");
   const [playerCountChart, setPlayerCountChart] = useState<PlayerCountChartItem[]>([]);
   const [avatarModalOpen, setAvatarModalOpen] = useState(false);
   const [scoreDistribution, setScoreDistribution] = useState<
@@ -206,7 +207,19 @@ export default function ProfilePage() {
   const [history, setHistory] = useState<GameHistoryItem[]>([]);
   const [historyPage, setHistoryPage] = useState(1);
 const HISTORY_PER_PAGE = 10;
-  
+  useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const tab = params.get("tab");
+
+  if (
+    tab === "dashboard" ||
+    tab === "rivalries" ||
+    tab === "history" ||
+    tab === "achievements"
+  ) {
+    setActiveTab(tab);
+  }
+}, []);
   useEffect(() => {
     async function loadProfile() {
       const ensuredProfile = await ensureUserProfile();
@@ -1058,7 +1071,15 @@ const paginatedHistory = sortedHistory.slice(
           ].map((tab) => (
             <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as ProfileTab)}
+            onClick={() => {
+  const nextTab = tab.id as ProfileTab;
+
+  setActiveTab(nextTab);
+
+  router.replace(`/profile?tab=${nextTab}`, {
+    scroll: false,
+  });
+}}
             className={[
               "rounded-xl px-4 py-3 font-black transition",
               activeTab === tab.id
