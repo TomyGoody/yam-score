@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AuthButton from "../components/AuthButton";
 import { supabase } from "../lib/supabase";
+import { ChevronRight } from "lucide-react";
 
 type CompetitionStatus = "in_progress" | "finished" | "abandoned";
 
@@ -390,6 +391,71 @@ const abandonedCompetitions = useMemo(
     ),
   [competitions]
 );
+const titlesWon = useMemo(() => {
+  if (!currentUserId) return 0;
+
+  return finishedCompetitions.filter((competition) => {
+    const me = competition.players.find(
+      (player) => player.profile_id === currentUserId
+    );
+
+    return me?.id === competition.winner_player_id;
+  }).length;
+}, [finishedCompetitions, currentUserId]);
+const grandSlamFinished = finishedCompetitions.filter(
+  (competition) =>
+    competition.competition_type === "grand_slam_final"
+);
+
+const worldCupFinished = finishedCompetitions.filter(
+  (competition) =>
+    competition.competition_type === "world_cup"
+);
+
+const grandSlamTitles = grandSlamFinished.filter(
+  (competition) => {
+    const me = competition.players.find(
+      (player) => player.profile_id === currentUserId
+    );
+
+    return me?.id === competition.winner_player_id;
+  }
+).length;
+
+const worldCupTitles = worldCupFinished.filter(
+  (competition) => {
+    const me = competition.players.find(
+      (player) => player.profile_id === currentUserId
+    );
+
+    return me?.id === competition.winner_player_id;
+  }
+).length;
+const competitionsPlayed = finishedCompetitions.length;
+
+const wonModeTypes = useMemo(() => {
+  if (!currentUserId) return 0;
+
+  const wonTypes = new Set<string>();
+
+  for (const competition of finishedCompetitions) {
+    const me = competition.players.find(
+      (player) => player.profile_id === currentUserId
+    );
+
+    if (me?.id === competition.winner_player_id) {
+      wonTypes.add(competition.competition_type);
+    }
+  }
+
+  return wonTypes.size;
+}, [finishedCompetitions, currentUserId]);
+
+const availableModeTypes = new Set(
+  competitions.map(
+    (competition) => competition.competition_type
+  )
+).size;
 const finishedPageCount = Math.max(
   1,
   Math.ceil(finishedCompetitions.length / ITEMS_PER_PAGE)
@@ -445,27 +511,57 @@ const visibleAbandonedCompetitions =
           </h1>
 
           <p className="mx-auto mt-4 max-w-2xl font-bold text-slate-400">
-            Enchaîne plusieurs parties de Yam dans des compétitions
-            persistantes et reprends-les sur plusieurs jours.
+            🏆 Entre dans la compétition.
+
+Affronte tes amis dans des formats exclusifs,
+reprends tes tournois quand tu veux
+et construis ton palmarès.
           </p>
         </header>
+        <section className="mt-8 rounded-3xl border border-[#9B6A28]/30 bg-[#111111] p-6">
+  <div className="flex items-center justify-between">
+    <div>
+      <h2 className="text-xl font-black text-white">
+        🏆 Ton palmarès
+      </h2>
+
+      <p className="mt-1 text-sm font-bold text-slate-500">
+        Toutes tes performances en compétitions.
+      </p>
+    </div>
+  </div>
+
+  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+  <PalmaresCard
+    icon="🏆"
+    value={String(titlesWon)}
+    label="Titres remportés"
+  />
+
+  <PalmaresCard
+    icon="🎮"
+    value={String(finishedCompetitions.length)}
+    label="Compétitions terminées"
+  />
+</div>
+</section>
 <nav className="mt-8 grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-[#111111] p-2 md:grid-cols-4">
   {[
     {
       id: "new" as const,
-      label: "Nouvelle compétition",
+      label: "🆕 Nouvelle compétition",
     },
     {
       id: "active" as const,
-      label: `En cours (${activeCompetitions.length})`,
+      label: `🟡 En cours (${activeCompetitions.length})`,
     },
     {
       id: "finished" as const,
-      label: `Terminées (${finishedCompetitions.length})`,
+      label: `🏆 Terminées (${finishedCompetitions.length})`,
     },
     {
       id: "abandoned" as const,
-      label: `Abandonnées (${abandonedCompetitions.length})`,
+      label: `❌ Abandonnées (${abandonedCompetitions.length})`,
     },
   ].map((tab) => {
     const selected = activeTab === tab.id;
@@ -474,7 +570,14 @@ const visibleAbandonedCompetitions =
       <button
         key={tab.id}
         type="button"
-        onClick={() => setActiveTab(tab.id)}
+        onClick={() => {
+  setActiveTab(tab.id);
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth",
+  });
+}}
         className={[
           "rounded-xl px-4 py-3 text-sm font-black transition",
           selected
@@ -601,40 +704,67 @@ const visibleAbandonedCompetitions =
 </div>
 
   {/* Contenu */}
-  <div className="flex flex-1 flex-col p-6">
-    <div>
-      <p className="text-xs font-black uppercase tracking-widest text-[#C44934]">
-        2 joueurs
-      </p>
+<div className="flex flex-col p-6">
+  <div>
+    <p className="text-xs font-black uppercase tracking-widest text-[#C44934]">
+      2 joueurs
+    </p>
 
-      <h2 className="mt-2 text-2xl font-black">
-        Finale de Grand Chelem
-      </h2>
+    <h2 className="mt-2 text-2xl font-black">
+      Finale de Grand Chelem
+    </h2>
 
-      <p className="mt-3 font-bold leading-relaxed text-[#5B4636]">
-        Chaque partie de Yam représente un set. Le premier joueur à
-        remporter trois sets gagne la finale.
-      </p>
+    <p className="mt-3 font-bold leading-relaxed text-[#5B4636]">
+      Chaque partie de Yam représente un set. Le premier joueur à
+      remporter trois sets gagne la finale.
+    </p>
+  </div>
 
-      <div className="mt-5 flex flex-wrap gap-2 text-sm font-black">
-        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
-          3 à 5 parties
+  <div className="mt-5 space-y-4">
+    <div className="flex flex-wrap gap-2 text-sm font-black">
+      <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+        3 à 5 parties
+      </span>
+
+      <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+        1 Vs 1
+      </span>
+
+      <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+        4 thèmes différents
+      </span>
+    </div>
+
+    {grandSlamFinished.length > 0 && (
+      <div className="flex flex-wrap gap-2 text-sm font-black text-[#7A3A2B]">
+        <span>
+          🏆 {grandSlamTitles}{" "}
+          {grandSlamTitles > 1 ? "titres" : "titre"}
         </span>
 
-        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
-          1 Vs 1
-        </span>
+        <span className="text-[#9A7A68]">•</span>
 
-        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
-          4 thèmes différents
+        <span>
+          🎮 {grandSlamFinished.length}{" "}
+          {grandSlamFinished.length > 1
+            ? "compétitions"
+            : "compétition"}
         </span>
       </div>
-    </div>
+    )}
 
-    <div className="mt-10 pt-10 font-black text-[#C44934]">
-      Découvrir le mode 👆
-    </div>
+    <div className="flex items-center justify-between">
+  <span className="font-black text-[#C44934]">
+    Découvrir le mode
+  </span>
+
+  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#C44934]/15 text-[#C44934] transition group-hover:bg-[#C44934] group-hover:text-white">
+    <ChevronRight className="h-6 w-6" strokeWidth={3} />
   </div>
+</div>
+  </div>
+</div>
+  
 </button>
   {/* Coupe du Monde */}
   <button
@@ -788,59 +918,83 @@ const visibleAbandonedCompetitions =
   </div>
 </div>
 
-    <div className="flex flex-1 flex-col p-6">
-      <div>
-        <p
-  className="text-xs font-black uppercase tracking-widest"
-  style={{ color: "#0B6B3A" }}
->
-  4 à 16 joueurs
-</p>
-        <h2 className="mt-2 text-2xl font-black">
-          Coupe du Monde
-        </h2>
+    <div className="flex flex-col p-6">
+  <div>
+    <p
+      className="text-xs font-black uppercase tracking-widest"
+      style={{ color: "#0B6B3A" }}
+    >
+      4 à 16 joueurs
+    </p>
 
-        <p className="mt-3 font-bold leading-relaxed text-[#5B4636]">
-          Un tournoi à élimination directe avec un tableau généré
-          aléatoirement et des qualifications automatiques.
-        </p>
+    <h2 className="mt-2 text-2xl font-black">
+      Coupe du Monde
+    </h2>
 
-        <div className="mt-5 flex flex-wrap gap-2 text-sm font-black">
-          <span
-            className="rounded-full px-3 py-1 text-white"
-            style={{ backgroundColor: "#241A13" }}
-          >
-            Élim. directe
-          </span>
+    <p className="mt-3 font-bold leading-relaxed text-[#5B4636]">
+      Un tournoi à élimination directe avec un tableau généré
+      aléatoirement et des qualifications automatiques.
+    </p>
+  </div>
 
-          <span
-            className="rounded-full px-3 py-1 text-white"
-            style={{ backgroundColor: "#241A13" }}
-          >
-            Tableau aléatoire
-          </span>
+  <div className="mt-5 space-y-4">
+    <div className="flex flex-wrap gap-2 text-sm font-black">
+      <span
+        className="rounded-full px-3 py-1 text-white"
+        style={{ backgroundColor: "#241A13" }}
+      >
+        Élim. directe
+      </span>
 
-          <span
-            className="rounded-full px-3 py-1 text-white"
-            style={{ backgroundColor: "#241A13" }}
-          >
-            1 partie par tour
-          </span>
-        </div>
-      </div>
-<p
-  className="mt-10 pt-10 font-black"
-  style={{ color: "#0B6B3A" }}
->
-  Découvrir le mode 👆
-</p>
-      
+      <span
+        className="rounded-full px-3 py-1 text-white"
+        style={{ backgroundColor: "#241A13" }}
+      >
+        Tableau aléatoire
+      </span>
+
+      <span
+        className="rounded-full px-3 py-1 text-white"
+        style={{ backgroundColor: "#241A13" }}
+      >
+        1 partie par tour
+      </span>
     </div>
+
+    {worldCupFinished.length > 0 && (
+      <div className="flex flex-wrap gap-2 text-sm font-black text-[#0B6B3A]">
+        <span>
+          🏆 {worldCupTitles}{" "}
+          {worldCupTitles > 1 ? "titres" : "titre"}
+        </span>
+
+        <span className="text-[#6F8F7B]">•</span>
+
+        <span>
+          🎮 {worldCupFinished.length}{" "}
+          {worldCupFinished.length > 1
+            ? "compétitions"
+            : "compétition"}
+        </span>
+      </div>
+    )}
+
+    <div className="flex items-center justify-between">
+  <span className="font-black text-[#0B6B3A]">
+    Découvrir le mode
+  </span>
+
+  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#0B6B3A]/15 text-[#0B6B3A] transition group-hover:bg-[#0B6B3A] group-hover:text-white">
+  <ChevronRight className="h-6 w-6" strokeWidth={3} />
+</div>
+</div>
+  </div>
+</div>
   </button>
 </section>
 )}
 {activeTab === "active" && (
-        <section className="mt-10 rounded-3xl border border-[#9B6A28]/40 bg-[#111111] p-6">
+        <section className="mt-5 rounded-3xl border border-[#9B6A28]/40 bg-[#111111] p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-black">
@@ -1624,4 +1778,29 @@ function getWorldCupRoundName(
   }
 
   return `Tour ${roundNumber}`;
+}
+function PalmaresCard({
+  icon,
+  value,
+  label,
+}: {
+  icon: string;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-center transition hover:border-[#9B6A28]/30">
+      <div className="text-3xl">
+        {icon}
+      </div>
+
+      <div className="mt-3 text-3xl font-black text-white">
+        {value}
+      </div>
+
+      <div className="mt-1 text-sm font-bold text-slate-500">
+        {label}
+      </div>
+    </div>
+  );
 }

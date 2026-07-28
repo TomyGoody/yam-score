@@ -9,7 +9,7 @@ import { useRouter,useSearchParams } from "next/navigation";
 import GameScreen from "./components/GameScreen";
 import Leaderboard from "./components/Leaderboard";
 import { getLevelFromTotalXp } from "./lib/levelRules";
-
+import { ChevronRight } from "lucide-react";
 import { getTournamentTheme } from "./lib/tournamentThemes";
 import type { TournamentThemeConfig } from "./lib/tournamentThemes";
 import {
@@ -3447,7 +3447,7 @@ function HomeMenu({
       <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#C44934] px-5 py-4 font-black transition group-hover:bg-[#D95841]">
         <span>Configurer ma partie</span>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
-  <span className="text-lg">▶</span>
+  <ChevronRight className="h-6 w-6" strokeWidth={3} />
 </div>
       </div>
     </div>
@@ -3514,7 +3514,7 @@ function HomeMenu({
       <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#A77322] px-5 py-4 font-black transition group-hover:bg-[#BD8628]">
         <span>Découvrir les modes</span>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
-  <span className="text-lg">▶</span>
+  <ChevronRight className="h-6 w-6" strokeWidth={3} />
 </div>
       </div>
     </div>
@@ -3563,7 +3563,7 @@ function HomeMenu({
           onClick={onResumeGame}
           className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C44934] px-6 font-black text-white transition hover:bg-[#D95841]"
         >
-          <span>▶</span>
+          <ChevronRight className="h-6 w-6" strokeWidth={3} />
           Reprendre
         </button>
       </div>
