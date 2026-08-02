@@ -53,6 +53,7 @@ export default function SalonAdminPage() {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [fitToScreen, setFitToScreen] = useState(false);
   const [fitScale, setFitScale] = useState(1);
+  const [salonConnected, setSalonConnected] = useState(true);
   const [fitOffsetX, setFitOffsetX] = useState(0);
   const [fitOffsetY, setFitOffsetY] = useState(0);
   const [currentPlayerOrder, setCurrentPlayerOrder] = useState(1);
@@ -465,6 +466,15 @@ return;
       document.removeEventListener("fullscreenchange", updateLayout);
     };
   }, [fitToScreen, players.length, gameMode]);
+  async function resyncSalon() {
+  if (!gameId) return;
+
+  await Promise.all([
+    loadScores(gameId),
+    loadPlayers(gameId),
+    loadSalon(),
+  ]);
+}
   useEffect(() => {
     if (!gameId) return;
     
@@ -483,8 +493,21 @@ return;
       }
     )
     .subscribe((status) => {
-      console.log("CHANNEL STATUS =", status);
-    });
+  console.log("CHANNEL STATUS =", status);
+
+  switch (status) {
+    case "SUBSCRIBED":
+  setSalonConnected(true);
+  void resyncSalon();
+  break;
+
+    case "CHANNEL_ERROR":
+    case "TIMED_OUT":
+    case "CLOSED":
+      setSalonConnected(false);
+      break;
+  }
+});
     
     return () => {
       supabase.removeChannel(channel);
@@ -650,6 +673,13 @@ return;
   }
   async function undoLastMove() {
     if (!gameId) return;
+
+if (!salonConnected) {
+  setMessage(
+    "Connexion perdue. Impossible d’annuler un coup pour le moment."
+  );
+  return;
+}
     
     const { data: lastScore, error: scoreError } = await supabase
     .from("yam_scores")
@@ -1081,6 +1111,7 @@ players.every((player) => getRemainingMoves(player.id) === 0);
 useEffect(() => {
   async function finishGame() {
     if (!gameId) return;
+    if (!salonConnected) return;
     if (!currentUserId) return;
     if (status !== "playing") return;
     if (!gameFinished) return;
@@ -1239,9 +1270,11 @@ useEffect(() => {
   competitionId,
   competitionType,
   competitionMatchId,
+  salonConnected,
 ]);
 if (status === "playing" || status === "finished") {
   return (
+    
     <main className="h-screen overflow-hidden bg-black text-white">
     
     
@@ -1319,7 +1352,30 @@ onBackToCompetition={
     }}
     
     />
-    
+    {!salonConnected && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-red-500 bg-black p-6 text-center shadow-2xl">
+      <div className="text-5xl">📡</div>
+
+      <div className="mt-3 text-sm font-black uppercase tracking-wider text-red-400">
+        Connexion perdue
+      </div>
+
+      <h2 className="mt-1 text-3xl font-black text-white">
+        Salon mis en pause
+      </h2>
+
+      <p className="mt-3 text-sm font-bold text-slate-300">
+        Les mises à jour du salon sont temporairement suspendues.
+      </p>
+
+      <div className="mt-5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-black text-red-300">
+        La partie se resynchronisera automatiquement dès le retour de la
+        connexion.
+      </div>
+    </div>
+  </div>
+)}
     {showQuitModal && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
       <div className="w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-6 text-center shadow-2xl">
@@ -1413,8 +1469,28 @@ competitionFinished={
     </main>
   );
 }
+
 return (
   <main className="relative flex min-h-screen items-center justify-center bg-black px-4 py-8 text-white">
+    {!salonConnected && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-red-500 bg-black p-6 text-center shadow-2xl">
+      <div className="text-5xl">📡</div>
+
+      <div className="mt-3 text-sm font-black uppercase text-red-400">
+        Connexion perdue
+      </div>
+
+      <h2 className="mt-1 text-3xl font-black text-white">
+        Salon indisponible
+      </h2>
+
+      <p className="mt-3 text-sm font-bold text-slate-300">
+        Reconnexion automatique en cours…
+      </p>
+    </div>
+  </div>
+)}
   <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
   <img
   src="/favicon.png"
@@ -1486,15 +1562,20 @@ return (
 )}
   <button
   onClick={startGame}
-  disabled={players.length !== playerCount}
+  disabled={
+  players.length !== playerCount ||
+  !salonConnected
+}
   className={[
     "mt-6 w-full rounded-xl p-4 text-lg font-black transition",
-    players.length === playerCount
+    players.length === playerCount && salonConnected
     ? "bg-[#C44934] text-white hover:bg-[#D75A43]"
     : "cursor-not-allowed bg-slate-900 text-slate-600",
   ].join(" ")}
   >
-  Démarrer la partie
+  {!salonConnected
+  ? "Connexion perdue"
+  : "Démarrer la partie"}
   </button>
   </div>
   </main>

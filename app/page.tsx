@@ -188,6 +188,12 @@ export default function Home() {
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const finishLocalGameStartedRef = useRef(false);
   const [currentLocalGameId, setCurrentLocalGameId] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+const [isSavingScore, setIsSavingScore] = useState(false);
+const [isCheckingConnection, setIsCheckingConnection] = useState(false);
+const [showReconnectedMessage, setShowReconnectedMessage] = useState(false);
+
+const wasOfflineRef = useRef(false);
   const scoreOptions = selectedCell ? getScoreOptions(selectedCell.rowId) : [];
   const useSideLeaderboard = players.length <= 3;
   
@@ -202,145 +208,170 @@ export default function Home() {
     })
   );
 }, [playerCount]);
-useEffect(() => {
-  async function loadCurrentUser() {
-    const {
-  data: { user },
-} = await supabase.auth.getUser();
-
-if (!user) {
-  setCurrentUserId(null);
-  setCurrentUsername(null);
-  setHomeStats(null);
-  return;
+function markConnectionLost() {
+  setIsOnline(false);
+  wasOfflineRef.current = true;
+  setShowReconnectedMessage(false);
 }
 
-setCurrentUserId(user.id);
-
-    const [
-      { data: profile, error: profileError },
-      { data: stats, error: statsError },
-      { data: recentGames, error: recentGamesError },
-    ] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("username")
-        .eq("id", user.id)
-        .single(),
-
-      supabase
-        .from("profile_stats")
-        .select(`
-          games_played_3,
-          games_played_6,
-          wins_3,
-          wins_6,
-          games_2_players,
-          games_3_players,
-          games_4_players,
-          games_5_players,
-          games_6_players
-        `)
-        .eq("profile_id", user.id)
-        .maybeSingle(),
-
-      supabase
-  .from("local_game_players")
-  .select(`
-    final_rank,
-    local_games!inner (
-      status,
-      player_count,
-      created_at,
-      finished_at
-    )
-  `)
-  .eq("profile_id", user.id)
-  .eq("local_games.status", "finished")
-  .gte("local_games.player_count", 2)
-  .not("final_rank", "is", null),
-    ]);
-
-    if (profileError) {
-      console.error(
-        "Erreur chargement profil :",
-        profileError
-      );
-    }
-
-    if (statsError) {
-      console.error(
-        "Erreur chargement statistiques :",
-        statsError
-      );
-    }
-
-    if (recentGamesError) {
-      console.error(
-        "Erreur chargement série actuelle :",
-        recentGamesError
-      );
-    }
-
-    setCurrentUsername(profile?.username ?? null);
-
-    const gamesPlayed =
-      (stats?.games_played_3 ?? 0) +
-      (stats?.games_played_6 ?? 0);
-
-    const multiplayerGames =
-      (stats?.games_2_players ?? 0) +
-      (stats?.games_3_players ?? 0) +
-      (stats?.games_4_players ?? 0) +
-      (stats?.games_5_players ?? 0) +
-      (stats?.games_6_players ?? 0);
-
-    const multiplayerWins =
-      (stats?.wins_3 ?? 0) +
-      (stats?.wins_6 ?? 0);
-
-    const sortedRecentGames = [...(recentGames ?? [])].sort((a, b) => {
-  const gameA = Array.isArray(a.local_games)
-    ? a.local_games[0]
-    : a.local_games;
-
-  const gameB = Array.isArray(b.local_games)
-    ? b.local_games[0]
-    : b.local_games;
-
-  const dateA = new Date(
-    gameA?.finished_at ?? gameA?.created_at ?? 0
-  ).getTime();
-
-  const dateB = new Date(
-    gameB?.finished_at ?? gameB?.created_at ?? 0
-  ).getTime();
-
-  return dateB - dateA;
-});
-
-let currentWinStreak = 0;
-
-for (const game of sortedRecentGames) {
-  if (game.final_rank !== 1) {
-    break;
+function isNetworkError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
   }
 
-  currentWinStreak += 1;
+  const message = error.message.toLowerCase();
+
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("load failed") ||
+    message.includes("fetch")
+  );
 }
 
-    setHomeStats({
-      gamesPlayed,
+useEffect(() => {
+  async function loadCurrentUser() {
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-      winRate:
-        multiplayerGames > 0
-          ? Math.round(
-              (multiplayerWins / multiplayerGames) * 100
+      if (authError) {
+        throw authError;
+      }
+
+      if (!user) {
+        setCurrentUserId(null);
+        setCurrentUsername(null);
+        setHomeStats(null);
+        return;
+      }
+
+      setCurrentUserId(user.id);
+
+      const [
+        { data: profile, error: profileError },
+        { data: stats, error: statsError },
+        { data: recentGames, error: recentGamesError },
+      ] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("username")
+          .eq("id", user.id)
+          .single(),
+
+        supabase
+          .from("profile_stats")
+          .select(`
+            games_played_3,
+            games_played_6,
+            wins_3,
+            wins_6,
+            games_2_players,
+            games_3_players,
+            games_4_players,
+            games_5_players,
+            games_6_players
+          `)
+          .eq("profile_id", user.id)
+          .maybeSingle(),
+
+        supabase
+          .from("local_game_players")
+          .select(`
+            final_rank,
+            local_games!inner (
+              status,
+              player_count,
+              created_at,
+              finished_at
             )
-          : 0,
+          `)
+          .eq("profile_id", user.id)
+          .eq("local_games.status", "finished")
+          .gte("local_games.player_count", 2)
+          .not("final_rank", "is", null),
+      ]);
 
-      currentWinStreak,
-    });
+      if (profileError) {
+        console.error("Erreur chargement profil :", profileError);
+      }
+
+      if (statsError) {
+        console.error("Erreur chargement statistiques :", statsError);
+      }
+
+      if (recentGamesError) {
+        console.error(
+          "Erreur chargement série actuelle :",
+          recentGamesError
+        );
+      }
+
+      setCurrentUsername(profile?.username ?? null);
+
+      const gamesPlayed =
+        (stats?.games_played_3 ?? 0) +
+        (stats?.games_played_6 ?? 0);
+
+      const multiplayerGames =
+        (stats?.games_2_players ?? 0) +
+        (stats?.games_3_players ?? 0) +
+        (stats?.games_4_players ?? 0) +
+        (stats?.games_5_players ?? 0) +
+        (stats?.games_6_players ?? 0);
+
+      const multiplayerWins =
+        (stats?.wins_3 ?? 0) +
+        (stats?.wins_6 ?? 0);
+
+      const sortedRecentGames = [...(recentGames ?? [])].sort((a, b) => {
+        const gameA = Array.isArray(a.local_games)
+          ? a.local_games[0]
+          : a.local_games;
+
+        const gameB = Array.isArray(b.local_games)
+          ? b.local_games[0]
+          : b.local_games;
+
+        const dateA = new Date(
+          gameA?.finished_at ?? gameA?.created_at ?? 0
+        ).getTime();
+
+        const dateB = new Date(
+          gameB?.finished_at ?? gameB?.created_at ?? 0
+        ).getTime();
+
+        return dateB - dateA;
+      });
+
+      let currentWinStreak = 0;
+
+      for (const game of sortedRecentGames) {
+        if (game.final_rank !== 1) {
+          break;
+        }
+
+        currentWinStreak += 1;
+      }
+
+      setHomeStats({
+        gamesPlayed,
+        winRate:
+          multiplayerGames > 0
+            ? Math.round((multiplayerWins / multiplayerGames) * 100)
+            : 0,
+        currentWinStreak,
+      });
+    } catch (error) {
+      if (isNetworkError(error) || !navigator.onLine) {
+        markConnectionLost();
+        return;
+      }
+
+      console.error("Erreur chargement utilisateur :", error);
+    }
   }
 
   void loadCurrentUser();
@@ -637,7 +668,36 @@ for (const game of sortedRecentGames) {
   useEffect(() => {
     updateSavedGameInfo();
   }, []);
-  
+  useEffect(() => {
+  setIsOnline(navigator.onLine);
+
+  function handleOffline() {
+    wasOfflineRef.current = true;
+    setIsOnline(false);
+    setShowReconnectedMessage(false);
+  }
+
+  function handleOnline() {
+    setIsOnline(true);
+
+    if (wasOfflineRef.current) {
+      setShowReconnectedMessage(true);
+      wasOfflineRef.current = false;
+
+      window.setTimeout(() => {
+        setShowReconnectedMessage(false);
+      }, 3000);
+    }
+  }
+
+  window.addEventListener("offline", handleOffline);
+  window.addEventListener("online", handleOnline);
+
+  return () => {
+    window.removeEventListener("offline", handleOffline);
+    window.removeEventListener("online", handleOnline);
+  };
+}, []);
   async function createPlayerLinkToken(playerKey: string) {
     if (!currentUserId) {
       alert("Tu dois être connecté pour ajouter un autre profil.");
@@ -920,6 +980,11 @@ useEffect(() => {
 }, [linkToken, playerCount]);
 function handleSelectCell(cell: SelectedCell) {
   if (gameFinished) return;
+
+  // Les modes spéciaux enregistrent chaque coup dans Supabase.
+  if (currentLocalGameId && !isOnline) {
+    return;
+  }
   const currentValue = getScore(cell.playerId, cell.columnId, cell.rowId);
   
   if (
@@ -1073,6 +1138,17 @@ useEffect(() => {
     supabase.removeChannel(channel);
   };
 }, [salonGameId]);
+useEffect(() => {
+  if (isOnline || !currentLocalGameId) return;
+
+  const interval = window.setInterval(() => {
+    void checkSupabaseConnection();
+  }, 5000);
+
+  return () => {
+    window.clearInterval(interval);
+  };
+}, [isOnline, currentLocalGameId]);
 function newGameFromVictory() {
   localStorage.removeItem(STORAGE_KEY);
   
@@ -1324,28 +1400,112 @@ function fillRandomGame() {
   
   setScores(nextScores);
 }
-async function saveScore(value: number | "X") {
-  if (gameFinished) return;
-  if (!selectedCell) return;
-  
+async function reloadScoresFromSupabase() {
+  if (!currentLocalGameId) return;
+
+  const { data, error } = await supabase
+    .from("local_game_scores")
+    .select("player_key, column_id, row_id, value")
+    .eq("game_id", currentLocalGameId);
+
+  if (error) {
+    console.error("Erreur rechargement des scores :", error);
+    return;
+  }
+
+  const loadedScores: Scores = {};
+
+  for (const score of data ?? []) {
+    loadedScores[score.player_key] = {
+      ...loadedScores[score.player_key],
+      [score.column_id]: {
+        ...loadedScores[score.player_key]?.[score.column_id],
+        [score.row_id as YamRow]:
+          score.value === "X" ? "X" : Number(score.value),
+      },
+    };
+  }
+
+  setScores(loadedScores);
+}
+async function saveScore(value: number | "X"): Promise<boolean> {
+  if (gameFinished) return false;
+  if (!selectedCell) return false;
+  if (isSavingScore) return false;
+
   const { playerId, columnId, rowId } = selectedCell;
   let finalValue: number | "X" = value;
-  
-  if (typeof value === "number" && (rowId === "plus" || rowId === "minus")) {
+
+  if (
+    typeof value === "number" &&
+    (rowId === "plus" || rowId === "minus")
+  ) {
     const oppositeRowId = rowId === "plus" ? "minus" : "plus";
     const oppositeValue = getScore(playerId, columnId, oppositeRowId);
-    
+
     if (typeof oppositeValue === "number") {
       if (rowId === "plus" && value <= oppositeValue) {
         finalValue = -50;
       }
-      
+
       if (rowId === "minus" && value >= oppositeValue) {
         finalValue = -50;
       }
     }
   }
-  
+
+  /*
+   * Une partie possédant currentLocalGameId est notamment
+   * un set de compétition sauvegardé coup par coup dans Supabase.
+   */
+  if (currentLocalGameId) {
+  if (!navigator.onLine) {
+  markConnectionLost();
+  return false;
+}
+
+  setIsSavingScore(true);
+
+  try {
+    const { error } = await supabase
+      .from("local_game_scores")
+      .upsert(
+        {
+          game_id: currentLocalGameId,
+          player_key: playerId,
+          column_id: columnId,
+          row_id: rowId,
+          value: String(finalValue),
+        },
+        {
+          onConflict: "game_id,player_key,column_id,row_id",
+        }
+      );
+
+    if (error) {
+      throw error;
+    }
+
+    setScores((current) => ({
+      ...current,
+      [playerId]: {
+        ...current[playerId],
+        [columnId]: {
+          ...current[playerId]?.[columnId],
+          [rowId]: finalValue,
+        },
+      },
+    }));
+  } catch (error) {
+    console.error("Erreur sauvegarde score :", error);
+
+    markConnectionLost();
+
+    return false;
+  } finally {
+    setIsSavingScore(false);
+  }
+} else {
   setScores((current) => ({
     ...current,
     [playerId]: {
@@ -1356,68 +1516,88 @@ async function saveScore(value: number | "X") {
       },
     },
   }));
-  if (currentLocalGameId) {
-    const { error } = await supabase.from("local_game_scores").upsert(
-      {
-        game_id: currentLocalGameId,
-        player_key: playerId,
-        column_id: columnId,
-        row_id: rowId,
-        value: String(finalValue),
-      },
-      {
-        onConflict: "game_id,player_key,column_id,row_id",
-      }
-    );
-    
-    if (error) {
-      console.error("Erreur sauvegarde score", error);
-    }
-  }
+}
+
   setLastScoreAnimation({
     playerId,
     columnId,
     rowId,
-    value,
+    value: finalValue,
   });
-  
-  setTimeout(() => {
+
+  window.setTimeout(() => {
     setLastScoreAnimation(null);
   }, 800);
+
   closeModal();
+
+  return true;
 }
 
-function clearScore() {
-  if (gameFinished) return;
-  if (!selectedCell) return;
-  
+async function clearScore(): Promise<boolean> {
+  if (gameFinished) return false;
+  if (!selectedCell) return false;
+  if (isSavingScore) return false;
+
   const { playerId, columnId, rowId } = selectedCell;
-  
-  setScores((current) => ({
-    ...current,
-    [playerId]: {
-      ...current[playerId],
-      [columnId]: {
-        ...current[playerId]?.[columnId],
-        [rowId]: null,
-      },
-    },
-  }));
+
   if (currentLocalGameId) {
-    supabase
-    .from("local_game_scores")
-    .delete()
-    .eq("game_id", currentLocalGameId)
-    .eq("player_key", playerId)
-    .eq("column_id", columnId)
-    .eq("row_id", rowId)
-    .then(({ error }) => {
+    if (!navigator.onLine) {
+      markConnectionLost();
+      return false;
+    }
+
+    setIsSavingScore(true);
+
+    try {
+      const { error } = await supabase
+        .from("local_game_scores")
+        .delete()
+        .eq("game_id", currentLocalGameId)
+        .eq("player_key", playerId)
+        .eq("column_id", columnId)
+        .eq("row_id", rowId);
+
       if (error) {
-        console.error("Erreur suppression score", error);
+        throw error;
       }
-    });
+
+      // On efface visuellement uniquement après confirmation Supabase.
+      setScores((current) => ({
+        ...current,
+        [playerId]: {
+          ...current[playerId],
+          [columnId]: {
+            ...current[playerId]?.[columnId],
+            [rowId]: null,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error("Erreur suppression score :", error);
+
+      markConnectionLost();
+
+      return false;
+    } finally {
+      setIsSavingScore(false);
+    }
+  } else {
+    // Partie locale classique : sauvegarde assurée par localStorage.
+    setScores((current) => ({
+      ...current,
+      [playerId]: {
+        ...current[playerId],
+        [columnId]: {
+          ...current[playerId]?.[columnId],
+          [rowId]: null,
+        },
+      },
+    }));
   }
+
   closeModal();
+  return true;
 }
 
 function closeModal() {
@@ -2095,6 +2275,37 @@ finishLocalGame();
 if (isLoadingCompetitionSet) {
   return <LoadingScreen />;
 }
+async function checkSupabaseConnection() {
+  if (isCheckingConnection) return;
+
+  setIsCheckingConnection(true);
+
+  try {
+    const { error } = await supabase
+      .from("local_games")
+      .select("id")
+      .limit(1);
+
+    if (error) {
+      throw error;
+    }
+
+    setIsOnline(true);
+    wasOfflineRef.current = false;
+    await reloadScoresFromSupabase();
+    setShowReconnectedMessage(true);
+
+    window.setTimeout(() => {
+      setShowReconnectedMessage(false);
+    }, 3000);
+  } catch (error) {
+    console.error("Connexion Supabase toujours indisponible :", error);
+    setIsOnline(false);
+    wasOfflineRef.current = true;
+  } finally {
+    setIsCheckingConnection(false);
+  }
+}
 return (
   <main
   className={
@@ -2273,9 +2484,47 @@ return (
     
     />
   )}
-  
+  {showReconnectedMessage && (
+  <div className="fixed left-1/2 top-5 z-[110] -translate-x-1/2 rounded-xl border border-emerald-500 bg-black px-5 py-3 font-black text-emerald-300 shadow-2xl">
+    ✓ Connexion rétablie
+  </div>
+)}
+  {screen === "game" && currentLocalGameId && !isOnline && (
+  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-red-500 bg-black p-6 text-center shadow-2xl">
+      <div className="text-5xl">📡</div>
+
+      <div className="mt-3 text-sm font-black uppercase tracking-wider text-red-400">
+        Connexion perdue
+      </div>
+
+      <h2 className="mt-1 text-3xl font-black text-white">
+        Partie mise en pause
+      </h2>
+
+      <p className="mt-3 text-sm font-bold text-slate-300">
+        Aucun nouveau score ne peut être enregistré tant que la connexion
+        n’est pas revenue.
+      </p>
+
+      <div className="mt-5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-black text-red-300">
+        Les scores déjà confirmés restent sauvegardés.
+      </div>
+      <button
+  type="button"
+  onClick={checkSupabaseConnection}
+  disabled={isCheckingConnection}
+  className="mt-5 w-full rounded-xl bg-red-500 px-4 py-3 font-black text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
+>
+  {isCheckingConnection
+    ? "Vérification en cours..."
+    : "Réessayer la connexion"}
+</button>
+    </div>
+  </div>
+)}
   {selectedCell && (
-    <ScoreModal
+  <ScoreModal
     scoreInput={scoreInput}
     setScoreInput={setScoreInput}
     scoreOptions={scoreOptions}
@@ -2284,18 +2533,22 @@ return (
     clearScore={clearScore}
     closeModal={closeModal}
     isValidScoreForRow={isValidScoreForRow}
+    isSavingScore={isSavingScore}
+    isOnline={isOnline}
+    requiresOnlineSave={Boolean(currentLocalGameId)}
     tournamentTheme={
       competitionLocalSet
-      ? getTournamentTheme(competitionLocalSet.theme)
-      : null
+        ? getTournamentTheme(competitionLocalSet.theme)
+        : null
     }
-    />
-  )}
+  />
+)}
   {showVictoryModal && gameFinished && (
     <VictoryModal
     players={getLeaderboard()}
     onViewGrid={() => setShowVictoryModal(false)}
     xpResults={xpResultsByPlayer}
+    isFinalizing={!finishedGameSaved}
     tournamentTheme={
       competitionLocalSet
       ? getTournamentTheme(
@@ -3072,16 +3325,22 @@ function ScoreModal({
   closeModal,
   isValidScoreForRow,
   tournamentTheme,
+  isSavingScore,
+isOnline,
+requiresOnlineSave,
 }: {
   scoreInput: string;
   setScoreInput: (value: string) => void;
   scoreOptions: number[];
   selectedCell: SelectedCell;
-  saveScore: (value: number | "X") => void | Promise<void>;
-  clearScore: () => void;
+  saveScore: (value: number | "X") => Promise<boolean>;
+  clearScore: () => Promise<boolean>;
   closeModal: () => void;
   isValidScoreForRow: (rowId: YamRow, value: number) => boolean;
   tournamentTheme?: ReturnType<typeof getTournamentTheme> | null;
+  isSavingScore: boolean;
+  isOnline: boolean;
+  requiresOnlineSave: boolean;
 }) {
   const isPlusMinus =
   selectedCell.rowId === "plus" || selectedCell.rowId === "minus";
@@ -3108,18 +3367,59 @@ function ScoreModal({
   ? `${tournamentTheme.buttonBackground} ${tournamentTheme.buttonHover} ${tournamentTheme.buttonText}`
   : "";
   
-  function validateManualScore() {
-    const value = Number(scoreInput);
-    
-    if (Number.isNaN(value)) return;
-    
-    if (!isValidScoreForRow(selectedCell.rowId, value)) {
-      setErrorMessage("Score impossible pour cette case.");
-      return;
-    }
-    
-    saveScore(value);
+  async function validateManualScore() {
+  if (isSavingScore) return;
+
+  if (requiresOnlineSave && !isOnline) {
+    setErrorMessage(
+      "Connexion perdue. Le score ne peut pas être enregistré."
+    );
+    return;
   }
+
+  const value = Number(scoreInput);
+
+  if (Number.isNaN(value)) return;
+
+  if (!isValidScoreForRow(selectedCell.rowId, value)) {
+    setErrorMessage("Score impossible pour cette case.");
+    return;
+  }
+
+  setErrorMessage("");
+
+  const saved = await saveScore(value);
+
+  if (!saved) {
+    setErrorMessage(
+      navigator.onLine
+        ? "Impossible d’enregistrer le score. Réessaie dans quelques secondes."
+        : "Connexion perdue. Le score n’a pas été enregistré."
+    );
+  }
+}
+async function handleClearScore() {
+  if (isSavingScore) return;
+
+  if (requiresOnlineSave && !isOnline) {
+    setErrorMessage(
+      "Connexion perdue. Le score ne peut pas être supprimé."
+    );
+    return;
+  }
+
+  setErrorMessage("");
+
+  const cleared = await clearScore();
+
+  if (!cleared) {
+    setErrorMessage(
+      navigator.onLine
+        ? "Impossible de supprimer le score. Réessaie dans quelques secondes."
+        : "Connexion perdue. Le score n’a pas été supprimé."
+    );
+  }
+}
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4">
     <div
@@ -3173,10 +3473,34 @@ function ScoreModal({
       {modalOptions.map((option) => (
         <button
         key={option}
-        onClick={() =>
-          option === "X" ? saveScore("X") : saveScore(option)
-        }
+        onClick={async () => {
+  if (isSavingScore) return;
+
+  if (requiresOnlineSave && !isOnline) {
+    setErrorMessage(
+      "Connexion perdue. Le score ne peut pas être enregistré."
+    );
+    return;
+  }
+
+  setErrorMessage("");
+
+  const saved =
+    option === "X"
+      ? await saveScore("X")
+      : await saveScore(option);
+
+  if (!saved) {
+    setErrorMessage(
+      navigator.onLine
+        ? "Impossible d’enregistrer le score. Réessaie dans quelques secondes."
+        : "Connexion perdue. Le score n’a pas été enregistré."
+    );
+  }
+}}
+disabled={isSavingScore || (requiresOnlineSave && !isOnline)}
         className={[
+          "disabled:cursor-not-allowed disabled:opacity-40",
           "min-h-14 rounded-xl border px-4 py-3 text-xl font-black transition",
           
           option === "X"
@@ -3225,30 +3549,41 @@ function ScoreModal({
     <div className="mt-4 grid gap-2">
     <button
     onClick={validateManualScore}
+    disabled={
+  isSavingScore ||
+  (requiresOnlineSave && !isOnline)
+}
     className={[
+      "disabled:cursor-not-allowed disabled:opacity-40",
       "rounded-xl py-3 font-black transition",
       isCompetition
       ? competitionButtonClasses
       : "bg-[#C44934] text-white hover:bg-[#D75A43]",
     ].join(" ")}
     >
-    ✓ Valider
+    {isSavingScore ? "Enregistrement..." : "✓ Valider"}
     </button>
     
     <button
-    onClick={clearScore}
+    onClick={handleClearScore}
+    disabled={
+  isSavingScore ||
+  (requiresOnlineSave && !isOnline)
+}
     className={[
+      "disabled:cursor-not-allowed disabled:opacity-40",
       "rounded-xl py-3 font-black transition",
       isCompetition
       ? "border border-[#CFAF95] bg-[#E8D8C5] text-[#241812] hover:bg-[#F1E4D5]"
       : "bg-[#241A13] text-white hover:bg-[#322217]",
     ].join(" ")}
     >
-    🗑️ Effacer
+    {isSavingScore ? "Sauvegarde en cours..." : "🗑️ Effacer"}
     </button>
     
     <button
     onClick={closeModal}
+    disabled={isSavingScore}
     className={[
       "rounded-xl border py-3 font-black transition",
       isCompetition
@@ -3256,7 +3591,7 @@ function ScoreModal({
       : "border-[#9B6A28]/40 text-slate-300 hover:bg-[#241A13]",
     ].join(" ")}
     >
-    ✘ Annuler
+    {isSavingScore ? "Sauvegarde en cours..." : "✘ Annuler"}
     </button>
     </div>
     </div>

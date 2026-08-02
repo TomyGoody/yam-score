@@ -36,6 +36,7 @@ export default function VictoryModal({
   onViewGrid,
   competitionType,
   competitionFinished,
+  isFinalizing,
 }: {
   players: VictoryPlayer[];
   xpResults: Record<string, XpResult>;
@@ -44,6 +45,7 @@ export default function VictoryModal({
   tournamentTheme?: TournamentThemeConfig | null;
   competitionType?: "grand_slam_final" | "world_cup" | null;
   competitionFinished?: boolean;
+  isFinalizing?: boolean;
 }) {
   const [selectedXpPlayerId, setSelectedXpPlayerId] = useState<string | null>(null);
 const isGrandSlam =
@@ -188,82 +190,92 @@ const isLightPlayerCard = tournamentTheme
                   <div className="text-2xl">{player.total}</div>
                 </div>
 
-                {xp && (
-                  <div className="mt-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedXpPlayerId(
-                          selectedXpPlayerId === player.id ? null : player.id
-                        )
-                      }
-                      className={[
-  "flex w-full items-center justify-between rounded-xl p-3 text-left text-sm font-black transition",
-  isLightPlayerCard
-    ? "bg-black/10 text-[#241812] hover:bg-black/15"
-    : "bg-white/10 text-white hover:bg-white/15",
-].join(" ")}
-                    >
-                      <span>
-                        ⭐ Niveau {xp.newLevel}
-                        {xp.newLevel > xp.oldLevel && (
-                          <span
-  className={[
-    "ml-2 rounded-full px-2 py-0.5",
-    isLightPlayerCard
-      ? "bg-emerald-600/15 text-emerald-800"
-      : "bg-emerald-400/20 text-emerald-300",
-  ].join(" ")}
->
-  +{xp.newLevel - xp.oldLevel}
-</span>
-                            
-                        )}
-                      </span>
+                {isFinalizing ? (
+  <div
+    className={[
+      "mt-3 flex items-center justify-center gap-2 rounded-xl p-3 text-sm font-black",
+      isLightPlayerCard
+        ? "bg-black/10 text-[#241812]"
+        : "bg-white/10 text-white",
+    ].join(" ")}
+  >
+    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+    Calcul de la progression…
+  </div>
+) : xp ? (
+  <div className="mt-3">
+    <button
+      type="button"
+      onClick={() =>
+        setSelectedXpPlayerId(
+          selectedXpPlayerId === player.id ? null : player.id
+        )
+      }
+      className={[
+        "flex w-full items-center justify-between rounded-xl p-3 text-left text-sm font-black transition",
+        isLightPlayerCard
+          ? "bg-black/10 text-[#241812] hover:bg-black/15"
+          : "bg-white/10 text-white hover:bg-white/15",
+      ].join(" ")}
+    >
+      <span>
+        ⭐ Niveau {xp.newLevel}
 
-                      <span>
-                        +{xp.xpGain} XP{" "}
-                        {selectedXpPlayerId === player.id ? "▲" : "▼"}
-                      </span>
-                    </button>
+        {xp.newLevel > xp.oldLevel && (
+          <span
+            className={[
+              "ml-2 rounded-full px-2 py-0.5",
+              isLightPlayerCard
+                ? "bg-emerald-600/15 text-emerald-800"
+                : "bg-emerald-400/20 text-emerald-300",
+            ].join(" ")}
+          >
+            +{xp.newLevel - xp.oldLevel}
+          </span>
+        )}
+      </span>
 
-                    {selectedXpPlayerId === player.id && (
-                      <div
-                        className={[
-  "mt-2 rounded-xl p-3 text-left text-xs font-black",
-  isLightPlayerCard
-    ? "bg-black/10 text-[#241812]"
-    : "bg-white/10 text-white",
-].join(" ")}
-                      >
-                        <div className="flex justify-between">
-  <span>Progression</span>
-  <span>+{xp.baseXp} XP</span>
-</div>
+      <span>
+        +{xp.xpGain} XP{" "}
+        {selectedXpPlayerId === player.id ? "▲" : "▼"}
+      </span>
+    </button>
 
+    {selectedXpPlayerId === player.id && (
+      <div
+        className={[
+          "mt-2 rounded-xl p-3 text-left text-xs font-black",
+          isLightPlayerCard
+            ? "bg-black/10 text-[#241812]"
+            : "bg-white/10 text-white",
+        ].join(" ")}
+      >
+        <div className="flex justify-between">
+          <span>Progression</span>
+          <span>+{xp.baseXp} XP</span>
+        </div>
 
+        <div className="mt-2 flex justify-between">
+          <span>Succès</span>
+          <span>+{xp.badgeXp} XP</span>
+        </div>
 
-<div className="mt-2 flex justify-between">
-  <span>Succès</span>
-  <span>+{xp.badgeXp} XP</span>
-</div>
-
-                        {xp.badges.length > 0 && (
-                          <div className="mt-3 space-y-1">
-                            {xp.badges.map((badge) => (
-                              <div
-                                key={`${badge.label}-${badge.milestone}`}
-                                className="opacity-80"
-                              >
-                                🏅 {badge.label} · {badge.milestone} (+{badge.xp} XP)
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+        {xp.badges.length > 0 && (
+          <div className="mt-3 space-y-1">
+            {xp.badges.map((badge) => (
+              <div
+                key={`${badge.label}-${badge.milestone}`}
+                className="opacity-80"
+              >
+                🏅 {badge.label} · {badge.milestone} (+{badge.xp} XP)
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+) : null}
               </div>
             );
           })}
@@ -272,31 +284,35 @@ const isLightPlayerCard = tournamentTheme
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
   {onViewGrid && (
     <button
-      type="button"
-      onClick={onViewGrid}
-      className="rounded-xl bg-[#F4E9DC] px-4 py-3 font-black text-[#241812] transition hover:bg-white"
-    >
-      Voir la grille
-    </button>
+  type="button"
+  onClick={onViewGrid}
+  disabled={isFinalizing}
+  className="rounded-xl bg-[#F4E9DC] px-4 py-3 font-black text-[#241812] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+>
+  {isFinalizing ? "Sauvegarde en cours…" : "Voir la grille"}
+</button>
   )}
 
   <button
     type="button"
     onClick={onBackHome}
+    disabled={isFinalizing}
     className={[
-      "rounded-xl px-4 py-3 font-black transition",
-      tournamentTheme
-        ? `${tournamentTheme.border} border bg-black/25 text-white hover:bg-black/40`
-        : "bg-[#241A13] text-white hover:bg-[#322217]",
-    ].join(" ")}
+  "rounded-xl px-4 py-3 font-black transition disabled:cursor-not-allowed disabled:opacity-40",
+  tournamentTheme
+    ? `${tournamentTheme.border} border bg-black/25 text-white hover:bg-black/40`
+    : "bg-[#241A13] text-white hover:bg-[#322217]",
+].join(" ")}
   >
-    {isWorldCupChampion
-  ? "Voir le champion"
-  : isWorldCup
-    ? "Retour à la Coupe du Monde"
-    : isGrandSlam
-      ? "Retour à la finale"
-      : "Retour accueil"}
+    {isFinalizing
+  ? "Finalisation en cours…"
+  : isWorldCupChampion
+    ? "Voir le champion"
+    : isWorldCup
+      ? "Retour à la Coupe du Monde"
+      : isGrandSlam
+        ? "Retour à la finale"
+        : "Retour accueil"}
   </button>
 </div>
         </div>
