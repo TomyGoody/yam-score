@@ -27,7 +27,12 @@ function getAllUnlockedBadges(stats: ProfileStats | null) {
   });
 }
 
-export async function syncProfileAchievements(profileId: string) {
+export async function syncProfileAchievements(
+  profileId: string,
+  options?: {
+    admin?: boolean;
+  }
+) {
   const { data: stats, error: statsError } = await supabase
     .from("profile_stats")
     .select("*")
@@ -91,22 +96,33 @@ export async function syncProfileAchievements(profileId: string) {
 
   const potentialBadges = getAllUnlockedBadges(stats);
 
-  const { data: claimedBadges, error: claimError } = await supabase.rpc(
-    "claim_profile_badges",
-    {
-      p_profile_id: profileId,
-      p_badges: potentialBadges,
-    }
-  );
+  const claimRpcName = options?.admin
+  ? "claim_profile_badges_admin"
+  : "claim_profile_badges";
+
+const { data: claimedBadges, error: claimError } = await supabase.rpc(
+  claimRpcName,
+  {
+    p_profile_id: profileId,
+    p_badges: potentialBadges,
+  }
+);
 
   if (claimError) {
-    console.error("Erreur claim badges sync", claimError);
+  console.error("Erreur claim badges sync", {
+    profileId,
+    claimRpcName,
+    message: claimError.message,
+    details: claimError.details,
+    hint: claimError.hint,
+    code: claimError.code,
+  });
 
-    return {
-      xpAwarded: 0,
-      unlockedBadges: [],
-    };
-  }
+  return {
+    xpAwarded: 0,
+    unlockedBadges: [],
+  };
+}
 
   const unlockedBadges = (claimedBadges ?? []).map((badge: any) => {
     const definition = potentialBadges.find(
@@ -128,10 +144,14 @@ export async function syncProfileAchievements(profileId: string) {
   );
 
   if (xpAwarded > 0) {
-    const { error: xpError } = await supabase.rpc("add_profile_xp", {
-      p_profile_id: profileId,
-      p_xp_gain: xpAwarded,
-    });
+    const xpRpcName = options?.admin
+  ? "add_profile_xp_admin"
+  : "add_profile_xp";
+
+const { error: xpError } = await supabase.rpc(xpRpcName, {
+  p_profile_id: profileId,
+  p_xp_gain: xpAwarded,
+});
 
     if (xpError) {
       console.error("Erreur ajout XP succès synchronisés", xpError);

@@ -3,8 +3,11 @@
 import Image from "next/image";
 import {
   getTournamentTheme,
-  
 } from "../lib/tournamentThemes";
+
+import {
+  getGrandPrixCircuitTheme,
+} from "../lib/grandPrixThemes";
 import type {
   CompetitionHeaderData,
 } from "../lib/competitionTypes";
@@ -55,7 +58,9 @@ export default function GameScreen({
   onBackToCompetition?: () => void;
 }) {
   const tournamentTheme = competitionHeader
-  ? getTournamentTheme(competitionHeader.theme)
+  ? competitionHeader.competitionType === "grand_prix"
+    ? getGrandPrixCircuitTheme(competitionHeader.circuitId)
+    : getTournamentTheme(competitionHeader.theme)
   : null;
   console.log({
   competitionHeader,
@@ -79,7 +84,14 @@ export default function GameScreen({
       }}
     />
 
-    <div className="pointer-events-none absolute inset-0 bg-black/45" />
+    <div
+  className={[
+    "pointer-events-none absolute inset-0",
+    competitionHeader?.competitionType === "grand_prix"
+      ? "bg-black/65"
+      : "bg-black/45",
+  ].join(" ")}
+/>
 
     <div
       className="pointer-events-none absolute inset-0"
@@ -216,10 +228,15 @@ export default function GameScreen({
         >
           <div className="flex w-max items-start gap-3">
             {players.map((player: any) => (
-              <PlayerSheetComponent
+             <PlayerSheetComponent
   key={player.id}
   player={player}
   tournamentTheme={tournamentTheme}
+  grandPrixCircuitId={
+    competitionHeader?.competitionType === "grand_prix"
+      ? competitionHeader.circuitId
+      : null
+  }
   {...playerSheetProps}
 />
             ))}
@@ -264,31 +281,53 @@ onOpenPlayerAccess?: () => void;
   const player1 = players[0];
   const player2 = players[1];
 
-  const tournamentTheme = getTournamentTheme(competition.theme);
+  const tournamentTheme =
+  competition.competitionType === "grand_prix"
+    ? getGrandPrixCircuitTheme(competition.circuitId)
+    : getTournamentTheme(competition.theme);
+
 
   return (
   <div
   className={[
-    "relative z-20 shrink-0 border-b px-5 py-3 text-white shadow-xl",
-    competition.competitionType === "world_cup"
-  ? "border-[#D69E1F]/70"
-  : tournamentTheme.border
-  ].join(" ")}
-  style={{
-  background: tournamentTheme.headerGradient,
+  "relative z-20 shrink-0 border-b px-5 py-3 text-white shadow-xl",
+  competition.competitionType === "world_cup"
+    ? "border-[#D69E1F]/70"
+    : tournamentTheme?.border ?? "border-white/15",
+].join(" ")}
+style={{
+  background:
+    tournamentTheme?.headerGradient ?? "#111111",
 }}
 >
   <div className="mx-auto flex w-full max-w-[1900px] items-center justify-between gap-6">
     <div className="flex min-w-0 items-center gap-3">
       <div className="flex h-14 w-14 shrink-0 items-center justify-center">
-  <Image
-    src={tournamentTheme.headerLogo}
-    alt={tournamentTheme.name}
-    width={56}
-    height={56}
-    className="max-h-14 w-auto object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.18)]"
-    priority
-  />
+  {tournamentTheme ? (
+  tournamentTheme.flagImage ? (
+    <Image
+      src={tournamentTheme.flagImage}
+      alt=""
+      width={56}
+      height={38}
+      className="max-h-10 w-auto rounded-sm object-cover shadow-lg"
+      priority
+    />
+  ) : tournamentTheme.headerLogo ? (
+    <Image
+      src={tournamentTheme.headerLogo}
+      alt={tournamentTheme.name}
+      width={56}
+      height={56}
+      className="max-h-14 w-auto object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.18)]"
+      priority
+    />
+  ) : (
+    <div className="text-4xl">
+      {tournamentTheme.icon}
+    </div>
+  )
+) : null}
 </div>
 
       <div className="min-w-0">
@@ -300,7 +339,7 @@ onOpenPlayerAccess?: () => void;
       : "text-xs tracking-[0.18em] text-white/70",
   ].join(" ")}
 >
-  {competition.tournamentName}
+  {tournamentTheme?.name ?? competition.tournamentName}
 </p>
 
         <p
@@ -318,23 +357,31 @@ onOpenPlayerAccess?: () => void;
     </div>
 
     <div className="hidden items-center gap-3 md:flex">
-  <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
-  {player1?.name ?? "Joueur 1"}
-</span>
-
-  {competition.competitionType === "world_cup" ? (
-    <div className="rounded-xl border border-[#D4A74A] bg-[#D4A74A]/10 px-5 py-2 text-base font-black tracking-[0.18em] text-[#FFF2BF] shadow-[0_0_20px_rgba(244,197,66,0.22)]">
-  VS
-</div>
-  ) : (
-    <div className="rounded-lg border border-white/20 bg-black/20 px-3 py-1 text-base font-black">
-      {competition.player1SetsWon}–{competition.player2SetsWon}
+  {competition.competitionType === "grand_prix" ? (
+    <div className="rounded-lg border border-white/20 bg-black/20 px-5 py-2 text-base font-black">
+      🏎️ {players.length} pilotes
     </div>
-  )}
+  ) : (
+    <>
+      <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
+        {player1?.name ?? "Joueur 1"}
+      </span>
 
-  <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
-  {player2?.name ?? "Joueur 2"}
-</span>
+      {competition.competitionType === "world_cup" ? (
+        <div className="rounded-xl border border-[#D4A74A] bg-[#D4A74A]/10 px-5 py-2 text-base font-black tracking-[0.18em] text-[#FFF2BF] shadow-[0_0_20px_rgba(244,197,66,0.22)]">
+          VS
+        </div>
+      ) : (
+        <div className="rounded-lg border border-white/20 bg-black/20 px-3 py-1 text-base font-black">
+          {competition.player1SetsWon}–{competition.player2SetsWon}
+        </div>
+      )}
+
+      <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
+        {player2?.name ?? "Joueur 2"}
+      </span>
+    </>
+  )}
 </div>
 
     <div className="flex items-center gap-3">
@@ -424,8 +471,10 @@ onOpenPlayerAccess?: () => void;
       ].join(" ")}
     >
       {competition.competitionType === "world_cup"
-        ? "Voir le tableau"
-        : "Voir la finale"}
+  ? "Voir le tableau"
+  : competition.competitionType === "grand_prix"
+    ? "Voir la saison"
+    : "Voir la finale"}
     </button>
   )}
 

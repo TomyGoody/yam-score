@@ -12,6 +12,9 @@ import {
   type TournamentTheme,
   type TournamentThemeConfig,
 } from "../../../../lib/tournamentThemes";
+import {
+  getGrandPrixCircuitTheme,
+} from "../../../../lib/grandPrixThemes";
 type GameMode = "6cols" | "3cols";
 type AccessStatus =
 | "checking"
@@ -33,15 +36,20 @@ export default function PlayerPage() {
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [playerName, setPlayerName] = useState("");
   const [isCompetitionSalon, setIsCompetitionSalon] = useState(false);
-  const [competitionType, setCompetitionType] = useState<
-  "grand_slam_final" | "world_cup" | null
-  >(null);
+ const [competitionType, setCompetitionType] = useState<
+  | "grand_slam_final"
+  | "world_cup"
+  | "grand_prix"
+  | null
+>(null);
   
   const [competitionTheme, setCompetitionTheme] =
   useState<TournamentThemeConfig | null>(null);
   
   const [competitionRoundNumber, setCompetitionRoundNumber] =
   useState<number | null>(null);
+  const [grandPrixCircuitId, setGrandPrixCircuitId] =
+  useState<string | null>(null);
   const [expectedProfileId, setExpectedProfileId] =
   useState<string | null>(null);
   
@@ -119,7 +127,7 @@ export default function PlayerPage() {
       "Erreur chargement thème compétition",
       competitionError
     );
-
+setGrandPrixCircuitId(null);
     setCompetitionType(null);
     setCompetitionTheme(null);
   } else {
@@ -128,26 +136,51 @@ export default function PlayerPage() {
       : competitionResult;
 
     if (competitionData) {
-      const nextCompetitionType =
-        competitionData.competition_type as
-          | "grand_slam_final"
-          | "world_cup";
+  const nextCompetitionType =
+    competitionData.competition_type as
+      | "grand_slam_final"
+      | "world_cup"
+      | "grand_prix";
 
-      const nextTheme =
-        competitionData.theme as TournamentTheme;
+  setCompetitionType(nextCompetitionType);
 
-      setCompetitionType(nextCompetitionType);
-      setCompetitionTheme(
-        getTournamentTheme(nextTheme)
-      );
-    } else {
-      setCompetitionType(null);
-      setCompetitionTheme(null);
-    }
+  if (nextCompetitionType === "grand_prix") {
+  const circuitId =
+    competitionData.circuit_id ?? null;
+const circuitTheme =
+  getGrandPrixCircuitTheme(circuitId);
+
+console.log("GRAND PRIX MOBILE THEME", {
+  competitionData,
+  circuitId,
+  normalizedCircuitId:
+    circuitId?.trim().toLowerCase().replaceAll("-", "_"),
+  circuitTheme,
+});
+
+setGrandPrixCircuitId(circuitId);
+setCompetitionTheme(circuitTheme);
+  
+} else {
+    const nextTheme =
+      competitionData.theme as TournamentTheme;
+
+    setGrandPrixCircuitId(null);
+
+    setCompetitionTheme(
+      getTournamentTheme(nextTheme)
+    );
   }
 } else {
   setCompetitionType(null);
   setCompetitionTheme(null);
+  setGrandPrixCircuitId(null);
+}
+  }
+} else {
+  setCompetitionType(null);
+  setCompetitionTheme(null);
+  setGrandPrixCircuitId(null);
 }
       const { data: player, error: playerError } = await supabase
       .from("yam_players")
@@ -403,9 +436,16 @@ export default function PlayerPage() {
         <h1 className="mt-2 text-3xl font-black">{playerName}</h1>
         
         <p className="mt-4 font-bold text-slate-400">
-        Cette place est associée à un profil YamScore. Connecte-toi avec
-        le compte correspondant pour accéder à la feuille.
-        </p>
+  Cette place n’est associée à aucun profil. Les statistiques de cette{" "}
+  {competitionType === "world_cup"
+    ? "partie de Coupe du Monde"
+    : competitionType === "grand_prix"
+      ? "course"
+      : competitionType === "grand_slam_final"
+        ? "partie de Grand Chelem"
+        : "partie"}{" "}
+  ne seront pas attribuées au compte actuellement connecté.
+</p>
         
         <div className="mt-6 flex justify-center">
         <AuthButton />
@@ -509,35 +549,126 @@ export default function PlayerPage() {
         </main>
       );
     }
-    if (gameStatus === "waiting") {
-      return (
-        <main className="relative flex min-h-screen items-center justify-center bg-black px-4 text-white">
+   if (gameStatus === "waiting") {
+  return (
+    <main
+      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 text-white"
+      style={{
+        backgroundColor:
+          competitionTheme?.pageBackgroundColor ?? "#000000",
+      }}
+    >
+      {competitionTheme?.backgroundImage ? (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: `url("${competitionTheme.backgroundImage}")`,
+            }}
+          />
+
+          <div className="pointer-events-none absolute inset-0 bg-black/70" />
+
+          {competitionTheme.backgroundGlow && (
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background: competitionTheme.backgroundGlow,
+              }}
+            />
+          )}
+        </>
+      ) : (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden opacity-[0.04]">
-        <img
-        src="/favicon.png"
-        alt=""
-        className="w-[900px] rotate-[-12deg] select-none"
-        />
+          <img
+            src="/favicon.png"
+            alt=""
+            className="w-[900px] rotate-[-12deg] select-none"
+          />
         </div>
-        
-        <div className="relative z-10 w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-8 text-center shadow-2xl">
-        <div className="text-5xl">🎲</div>
-        
-        <div className="mt-3 text-sm font-black uppercase text-[#C44934]">
-        Salon {code} · Joueur {order}
+      )}
+
+      <div
+        className={[
+          "relative z-10 w-full max-w-md overflow-hidden rounded-3xl border-2 p-8 text-center shadow-2xl",
+          competitionTheme
+            ? competitionTheme.border
+            : "border-[#9B6A28]/70 bg-black",
+        ].join(" ")}
+        style={
+          competitionTheme
+            ? {
+                background: competitionTheme.headerGradient,
+              }
+            : undefined
+        }
+      >
+        {competitionTheme?.flagImage ? (
+          <Image
+            src={competitionTheme.flagImage}
+            alt={`Drapeau — ${competitionTheme.name}`}
+            width={96}
+            height={64}
+            className="mx-auto h-16 w-auto rounded-md object-contain drop-shadow-xl"
+            priority
+          />
+        ) : competitionTheme?.headerLogo ? (
+          <Image
+            src={competitionTheme.headerLogo}
+            alt={competitionTheme.name}
+            width={80}
+            height={80}
+            className="mx-auto h-20 w-auto object-contain drop-shadow-xl"
+            priority
+          />
+        ) : (
+          <div className="text-5xl">
+            {competitionTheme?.icon ?? "🎲"}
+          </div>
+        )}
+
+        <div
+          className={[
+            "mt-4 text-sm font-black uppercase tracking-[0.18em]",
+            competitionTheme
+              ? competitionTheme.accentText
+              : "text-[#C44934]",
+          ].join(" ")}
+        >
+          {competitionType === "grand_prix"
+            ? competitionTheme?.name ?? "Grand Prix"
+            : competitionType === "world_cup"
+              ? "Coupe du Monde"
+              : competitionType === "grand_slam_final"
+                ? competitionTheme?.name ?? "Grand Chelem"
+                : `Salon ${code}`}
         </div>
-        
-        <h1 className="mt-1 text-3xl font-black text-white">
-        En attente
+
+        {competitionType && (
+          <div className="mt-2 text-sm font-bold text-white/65">
+            {competitionType === "grand_prix"
+              ? `Manche ${competitionRoundNumber ?? 1}`
+              : competitionType === "world_cup"
+                ? `Match ${competitionRoundNumber ?? 1}`
+                : `Finale · Set ${competitionRoundNumber ?? 1}`}
+          </div>
+        )}
+
+        <h1 className="mt-4 text-3xl font-black text-white">
+          En attente
         </h1>
-        
-        <p className="mt-3 text-sm font-bold text-slate-400">
-        L’administrateur du salon doit démarrer la partie.
+
+        <p className="mt-2 font-black text-white/85">
+          {playerName || `Joueur ${order}`}
         </p>
-        </div>
-        </main>
-      );
-    }
+
+        <p className="mt-3 text-sm font-bold text-white/60">
+          L’administrateur du salon doit démarrer la partie.
+        </p>
+      </div>
+    </main>
+  );
+}
     const finalRanking = finalPlayers
     .map((player) => ({
       ...player,
@@ -556,7 +687,38 @@ export default function PlayerPage() {
     if (gameStatus === "finished") {
   const isWorldCup = competitionType === "world_cup";
   const didWin = myRank === 1;
+const isGrandPrix =
+  competitionType === "grand_prix";
+ function getThemeColor(
+  className: string | undefined,
+  prefix: "bg" | "text" | "border"
+) {
+  if (!className) return undefined;
 
+  const match = className.match(
+    new RegExp(`${prefix}-\\[(#[0-9A-Fa-f]{6})\\]`)
+  );
+
+  return match?.[1];
+}
+
+const finalButtonBackground =
+  getThemeColor(
+    competitionTheme?.buttonBackground,
+    "bg"
+  ) ?? "#C44934";
+
+const finalButtonText =
+  getThemeColor(
+    competitionTheme?.buttonText,
+    "text"
+  ) ?? "#FFFFFF";
+
+const finalButtonBorder =
+  getThemeColor(
+    competitionTheme?.border,
+    "border"
+  ) ?? finalButtonBackground;
   return (
     <main
       className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 text-white"
@@ -603,18 +765,29 @@ export default function PlayerPage() {
             : undefined
         }
       >
-        {competitionTheme ? (
-          <Image
-            src={competitionTheme.headerLogo}
-            alt={competitionTheme.name}
-            width={88}
-            height={88}
-            className="mx-auto h-20 w-auto object-contain drop-shadow-xl"
-            priority
-          />
-        ) : (
-          <div className="text-5xl">🏆</div>
-        )}
+        {competitionTheme?.flagImage ? (
+  <Image
+    src={competitionTheme.flagImage}
+    alt={`Drapeau — ${competitionTheme.name}`}
+    width={96}
+    height={64}
+    className="mx-auto h-16 w-auto rounded-md object-contain drop-shadow-xl"
+    priority
+  />
+) : competitionTheme?.headerLogo ? (
+  <Image
+    src={competitionTheme.headerLogo}
+    alt={competitionTheme.name}
+    width={88}
+    height={88}
+    className="mx-auto h-20 w-auto object-contain drop-shadow-xl"
+    priority
+  />
+) : (
+  <div className="text-5xl">
+    {competitionTheme?.icon ?? "🏆"}
+  </div>
+)}
 
         <div
           className={[
@@ -631,21 +804,27 @@ export default function PlayerPage() {
 
         <h1 className="mt-2 text-3xl font-black text-white">
           {competitionTheme
-            ? isWorldCup
-              ? "Match terminé"
-              : "Set terminé"
-            : "Partie terminée"}
+  ? isWorldCup
+    ? "Match terminé"
+    : isGrandPrix
+      ? "Grand Prix terminé"
+      : "Set terminé"
+  : "Partie terminée"}
         </h1>
 
         {competitionTheme && (
           <p className="mt-2 text-sm font-bold text-white/70">
             {didWin
-              ? isWorldCup
-                ? "Tu remportes le match"
-                : "Tu remportes le set"
-              : isWorldCup
-                ? "Tu es éliminé"
-                : "Tu perds le set"}
+  ? isWorldCup
+    ? "Tu remportes le match"
+    : isGrandPrix
+      ? "Tu remportes le Grand Prix"
+      : "Tu remportes le set"
+  : isWorldCup
+    ? "Tu es éliminé"
+    : isGrandPrix
+      ? `Tu termines à la ${myRank ?? "-"}e place`
+      : "Tu perds le set"}
           </p>
         )}
 
@@ -685,29 +864,19 @@ export default function PlayerPage() {
         </p>
 
         <button
-        
-          type="button"
-          onClick={() => {
-  if (competitionId && competitionType) {
-    window.location.href =
-      competitionType === "world_cup"
-        ? `/modes-speciaux/coupe-du-monde/${competitionId}`
-        : `/modes-speciaux/grand-chelem/${competitionId}`;
-
-    return;
-  }
-
-  window.location.href = "/";
-}}
-          className={[
-            "mt-6 w-full rounded-xl px-4 py-3 font-black transition",
-            competitionTheme
-              ? `${competitionTheme.buttonBackground} ${competitionTheme.buttonHover} ${competitionTheme.buttonText}`
-              : "bg-[#C44934] text-white hover:bg-[#D75A43]",
-          ].join(" ")}
-        >
-          Retour accueil
-        </button>
+  type="button"
+  onClick={() => {
+    window.location.href = "/";
+  }}
+  className="mt-6 w-full rounded-xl border px-4 py-3 font-black transition"
+  style={{
+    backgroundColor: finalButtonBackground,
+    color: finalButtonText,
+    borderColor: finalButtonBorder,
+  }}
+>
+  Retour à l'accueil
+</button>
       </div>
     </main>
   );
@@ -732,6 +901,7 @@ export default function PlayerPage() {
       competitionType={competitionType}
       competitionTheme={competitionTheme}
       competitionRoundNumber={competitionRoundNumber}
+      grandPrixCircuitId={grandPrixCircuitId}
     />
   );
 }
@@ -760,6 +930,7 @@ return (
   setCurrentPlayerOrder,
   competitionType,
   competitionTheme,
+  grandPrixCircuitId,
   competitionRoundNumber,
 }: {
   code: string;
@@ -770,7 +941,11 @@ return (
   playerId: string | null;
   currentPlayerOrder: number;
   setCurrentPlayerOrder: (value: number) => void;
-  competitionType: "grand_slam_final" | "world_cup";
+  grandPrixCircuitId: string | null;
+  competitionType:
+  | "grand_slam_final"
+  | "world_cup"
+  | "grand_prix";
   competitionTheme: TournamentThemeConfig;
   competitionRoundNumber: number | null;
 }) {
@@ -787,6 +962,7 @@ return (
     competitionType={competitionType}
     competitionTheme={competitionTheme}
     competitionRoundNumber={competitionRoundNumber}
+    grandPrixCircuitId={grandPrixCircuitId}
   />
 );
 }
@@ -802,6 +978,7 @@ return (
     competitionType,
 competitionTheme,
 competitionRoundNumber,
+grandPrixCircuitId,
   }: {
     code: string;
     playerName: string;
@@ -811,7 +988,11 @@ competitionRoundNumber,
     playerId: string | null;
     currentPlayerOrder: number;
     setCurrentPlayerOrder: (value: number) => void;
-    competitionType?: "grand_slam_final" | "world_cup";
+    grandPrixCircuitId?: string | null;
+    competitionType?:
+  | "grand_slam_final"
+  | "world_cup"
+  | "grand_prix";
   competitionTheme?: TournamentThemeConfig;
   competitionRoundNumber?: number | null;
   }) {
@@ -842,13 +1023,56 @@ competitionRoundNumber,
 const isWorldCup =
   competitionType === "world_cup";
 
+const isGrandPrix =
+  competitionType === "grand_prix";
+ function getThemeColor(
+  className: string | undefined,
+  prefix: "bg" | "text" | "border"
+) {
+  if (!className) return undefined;
+
+  const match = className.match(
+    new RegExp(`${prefix}-\\[(#[0-9A-Fa-f]{6})\\]`)
+  );
+
+  return match?.[1];
+}
+
+const themeButtonBackground = getThemeColor(
+  competitionTheme?.buttonBackground,
+  "bg"
+);
+
+const themeScoreBackground = getThemeColor(
+  competitionTheme?.scoreBackground,
+  "bg"
+);
+
+const themeButtonText = getThemeColor(
+  competitionTheme?.buttonText,
+  "text"
+) ?? "#FFFFFF";
+
+const themeScoreText = getThemeColor(
+  competitionTheme?.scoreText,
+  "text"
+);
+
+const themeBorder = getThemeColor(
+  competitionTheme?.border,
+  "border"
+);
 const competitionLabel = isWorldCup
   ? "Coupe du Monde"
-  : competitionTheme?.name ?? "";
+  : isGrandPrix
+    ? competitionTheme?.name ?? "Grand Prix"
+    : competitionTheme?.name ?? "";
 
 const roundLabel = isWorldCup
   ? `Match ${competitionRoundNumber ?? 1}`
-  : `Finale · Set ${competitionRoundNumber ?? 1}`;
+  : isGrandPrix
+    ? `Manche ${competitionRoundNumber ?? 1}`
+    : `Finale · Set ${competitionRoundNumber ?? 1}`;
     const activeColumns =
     gameMode === "6cols"
     ? columns
@@ -1053,60 +1277,75 @@ function renderRowButton(row: (typeof rows)[number]) {
     }}
     >
     <button
-    type="button"
-    onClick={() => {
-      if (!isPlayable) return;
-      
-      setSelectedRowId(row.id);
-      
-      setTimeout(() => {
-        rowRefs.current[row.id]?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        });
-      }, 100);
-    }}
-    className={[
-  "flex h-14 w-full items-center justify-center rounded-xl border font-black transition",
-  !isPlayable
-    ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
-    : competitionTheme
-      ? selectedRowId === row.id
-        ? `${competitionTheme.buttonBackground} ${competitionTheme.buttonText} ${competitionTheme.border}`
-        : `${competitionTheme.border} bg-black/65 text-white hover:bg-black/80`
-      : selectedRowId === row.id
-        ? "border-[#C44934] bg-[#C44934] text-white"
-        : "border-slate-800 bg-slate-900 text-white hover:bg-slate-800",
-].join(" ")}
-    >
-    <span className="text-base">
+  type="button"
+  onClick={() => {
+    if (!isPlayable) return;
+
+    setSelectedRowId(row.id);
+
+    setTimeout(() => {
+      rowRefs.current[row.id]?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 100);
+  }}
+  className={[
+    "flex h-14 w-full items-center justify-center rounded-xl border font-black transition",
+    !isPlayable
+      ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
+      : "",
+  ].join(" ")}
+  style={
+    isPlayable && competitionTheme
+      ? {
+          backgroundColor:
+            selectedRowId === row.id
+              ? themeButtonBackground
+              : themeScoreBackground,
+          color:
+            selectedRowId === row.id
+              ? themeButtonText
+              : themeScoreText,
+          borderColor: themeBorder,
+        }
+      : undefined
+  }
+>
+  <span className="text-base">
     {isFilled ? "✓ " : ""}
     {row.label}
-    </span>
-    </button>
+  </span>
+</button>
     
     {selectedRowId === row.id && isPlayable && (
       <div className="mb-3 mt-2 grid grid-cols-3 gap-2">
       {getPossibleValues(row.id).map((value) => (
         <button
-        key={String(value)}
-        type="button"
-        onClick={() =>
-          saveMobileScore(selectedColumnId, row.id, value)
+  key={String(value)}
+  type="button"
+  onClick={() =>
+    saveMobileScore(selectedColumnId, row.id, value)
+  }
+  className="rounded-xl border p-3 font-black transition"
+  style={
+    competitionTheme
+      ? {
+          backgroundColor:
+            value === "X"
+              ? themeButtonBackground
+              : themeScoreBackground,
+          color:
+            value === "X"
+              ? themeButtonText
+              : themeScoreText,
+          borderColor: themeBorder,
         }
-        className={[
-  "rounded-xl border p-3 font-black transition",
-  value === "X"
-    ? competitionTheme
-      ? `${competitionTheme.buttonBackground} ${competitionTheme.buttonHover} ${competitionTheme.buttonText} ${competitionTheme.border}`
-      : "border-[#C44934] bg-[#C44934] text-white hover:bg-[#D75A43]"
-    : competitionTheme
-      ? `${competitionTheme.border} ${competitionTheme.scoreBackground} ${competitionTheme.scoreText}`
-      : "border-[#D7C4B3] bg-[#F4E9DC] text-black hover:bg-[#FFF8EF]",
-].join(" ")}
-        >
-        {value}
-        </button>
+      : undefined
+  }
+>
+  {value}
+</button>
       ))}
       </div>
     )}
@@ -1161,14 +1400,29 @@ return (
       >
         {isCompetition && competitionTheme ? (
           <>
-            <Image
-              src={competitionTheme.headerLogo}
-              alt={competitionTheme.name}
-              width={72}
-              height={72}
-              className="mx-auto h-16 w-auto object-contain drop-shadow-xl"
-              priority
-            />
+            {competitionTheme.flagImage ? (
+  <Image
+    src={competitionTheme.flagImage}
+    alt={`Drapeau — ${competitionTheme.name}`}
+    width={84}
+    height={56}
+    className="mx-auto h-14 w-auto rounded-md object-contain drop-shadow-xl"
+    priority
+  />
+) : competitionTheme.headerLogo ? (
+  <Image
+    src={competitionTheme.headerLogo}
+    alt={competitionTheme.name}
+    width={72}
+    height={72}
+    className="mx-auto h-16 w-auto object-contain drop-shadow-xl"
+    priority
+  />
+) : (
+  <div className="text-5xl">
+    {competitionTheme.icon ?? "🏁"}
+  </div>
+)}
 
             <div
               className={[
@@ -1270,29 +1524,36 @@ return (
       
       return (
         <button
-        key={column.id}
-        type="button"
-        onClick={() => {
-          if (!isMyTurn) return;
-          
-          setSelectedColumnId(column.id);
-          setSelectedRowId(null);
-        }}
-        className={[
-  "min-h-[56px] rounded-2xl border p-3 text-center font-black transition",
-  !isMyTurn
-    ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
-    : competitionTheme
-      ? isSelected
-        ? `${competitionTheme.buttonBackground} ${competitionTheme.buttonText} ${competitionTheme.border}`
-        : `${competitionTheme.border} bg-black/65 text-white hover:bg-black/80`
-      : isSelected
-        ? "border-[#C44934] bg-[#C44934] text-white"
-        : "border-slate-800 bg-slate-900 text-white hover:bg-slate-800",
-].join(" ")}
-        >
-        {label}
-        </button>
+  key={column.id}
+  type="button"
+  onClick={() => {
+    if (!isMyTurn) return;
+
+    setSelectedColumnId(column.id);
+    setSelectedRowId(null);
+  }}
+  className={[
+    "min-h-[56px] rounded-2xl border p-3 text-center font-black transition",
+    !isMyTurn
+      ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
+      : "",
+  ].join(" ")}
+  style={
+    isMyTurn && competitionTheme
+      ? {
+          backgroundColor: isSelected
+            ? themeButtonBackground
+            : themeScoreBackground,
+          color: isSelected
+            ? themeButtonText
+            : themeScoreText,
+          borderColor: themeBorder,
+        }
+      : undefined
+  }
+>
+  {label}
+</button>
       );
     })}
     </div>

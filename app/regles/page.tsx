@@ -78,6 +78,10 @@ export default function RulesPage() {
   title="🏆 Modes spéciaux"
   content="Les modes spéciaux proposent des compétitions composées de plusieurs parties. Les joueurs s'affrontent jusqu'à atteindre le nombre de victoires requis. L'ordre du premier joueur est redéterminé avant chaque nouvelle partie."
 />
+<RuleCard
+            title="➕/➖ Plus et Moins"
+            content="Il est impératif d'avoir un score 'Moins' inférieur à un score 'Plus' dans la même colonne. Si un joueur n'y parvient pas, il obtient un malus de - 50 et sa case est annulée."
+          />
         </div>
 
         <section className="mt-6 rounded-3xl border border-[#9B6A28]/50 bg-[#111111] p-6">
@@ -86,6 +90,54 @@ export default function RulesPage() {
           </p>
 
           <h2 className="mt-2 text-3xl font-black">🔢 Combinaisons</h2>
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+  <div className="rounded-2xl border border-[#9B6A28]/40 bg-[#1A130E] p-4">
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-xl">
+        🎲
+      </div>
+
+      <div>
+        <p className="text-sm font-black uppercase tracking-wider text-[#C44934]">
+          Brelan, Full, Carré et Yam
+        </p>
+
+        <p className="mt-1 text-sm font-bold leading-relaxed text-slate-300">
+          Seule la combinaison compte : la valeur des dés n’a pas
+          d’importance.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div className="rounded-2xl border border-[#9B6A28]/40 bg-[#1A130E] p-4">
+    <div className="flex items-start gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-xl">
+        🔢
+      </div>
+
+      <div>
+        <p className="text-sm font-black uppercase tracking-wider text-[#C44934]">
+          Quinte
+        </p>
+
+        <p className="mt-1 text-sm font-bold text-slate-300">
+          Deux suites sont possibles :
+        </p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="rounded-lg border border-[#9B6A28]/40 bg-black/30 px-3 py-1.5 font-black text-white">
+            1 · 2 · 3 · 4 · 5
+          </span>
+
+          <span className="rounded-lg border border-[#9B6A28]/40 bg-black/30 px-3 py-1.5 font-black text-white">
+            2 · 3 · 4 · 5 · 6
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <FigureCard title="Brelan" score="20 points" />

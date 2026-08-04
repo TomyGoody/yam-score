@@ -35,6 +35,14 @@ export const PERFORMANCE_6COLS_MILESTONES = [1400, 1500, 1550, 1600, 1650, 1700,
 export const EXPLOIT_3COLS_MILESTONES = [1000];
 export const EXPLOIT_WIN_STREAK = [10];
 export const EXPLOIT_6COLS_MILESTONES = [2000];
+
+export const GRAND_PRIX_MILESTONES = [
+  1, 3, 5, 10, 25, 50, 100, 250,
+];
+
+export const GRAND_PRIX_TITLE_MILESTONES = [
+  1, 2, 3, 5, 10, 25, 50, 100,
+];
 export const PERFORMANCE_BADGE_XP = [
   10,
   25,
@@ -201,7 +209,36 @@ export const achievementDefinitions: readonly AchievementDefinition[] = [
   metric: "world_cup_wins",
   milestones: WORLD_CUP_MILESTONES,
 },
-
+{
+  id: "grand_prix_played",
+  label: "Grands Prix disputés",
+  metric: "grand_prix_played",
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  id: "grand_prix_wins",
+  label: "Grands Prix remportés",
+  metric: "grand_prix_wins",
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  id: "grand_prix_podiums",
+  label: "Podiums en Grand Prix",
+  metric: "grand_prix_podiums",
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  id: "grand_prix_seasons_completed",
+  label: "Saisons Grand Prix terminées",
+  metric: "grand_prix_seasons_completed",
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  id: "grand_prix_titles",
+  label: "Titres de champion Grand Prix",
+  metric: "grand_prix_titles",
+  milestones: GRAND_PRIX_MILESTONES,
+},
 ] ;
 
 export function getUnlockedMilestoneIndexes(value: number, milestones: readonly number[]) {

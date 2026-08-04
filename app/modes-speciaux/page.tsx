@@ -14,8 +14,14 @@ type TournamentTheme =
   | "roland_garros"
   | "wimbledon"
   | "us_open"
-  | "world_cup";
-
+  | "world_cup"
+  | "grand_prix";
+type GrandPrixSummary = {
+  competition_id: string;
+  race_number: number;
+  circuit_id: string;
+  status: "waiting" | "playing" | "finished";
+};
 type Competition = {
   id: string;
   competition_type: string;
@@ -28,6 +34,7 @@ type Competition = {
   current_play_mode: "local" | "salon" | null;
   created_at: string;
   finished_at: string | null;
+  grand_prix_count: number | null;
 };
 
 type CompetitionPlayer = {
@@ -43,12 +50,38 @@ type CompetitionPlayer = {
 type CompetitionWithPlayers = Competition & {
   players: CompetitionPlayer[];
   matches: CompetitionMatchSummary[];
+  grandPrixRaces: GrandPrixSummary[];
 };
 type CompetitionMatchSummary = {
   competition_id: string;
   round_number: number;
   status: "waiting" | "ready" | "playing" | "finished";
 };
+const GRAND_PRIX_CIRCUIT_NAMES: Record<string, string> = {
+  melbourne: "Melbourne",
+  bahrain: "Bahreïn",
+  jeddah: "Djeddah",
+  suzuka: "Suzuka",
+  shanghai: "Shanghai",
+  imola: "Imola",
+  monaco: "Monaco",
+  barcelona: "Barcelone",
+  montreal: "Montréal",
+  spielberg: "Spielberg",
+  silverstone: "Silverstone",
+  spa: "Spa-Francorchamps",
+  zandvoort: "Zandvoort",
+  monza: "Monza",
+  singapore: "Singapour",
+  austin: "Austin",
+  mexico: "Mexico",
+  interlagos: "Interlagos",
+  abu_dhabi: "Abou Dabi",
+};
+
+function getGrandPrixCircuitName(circuitId: string) {
+  return GRAND_PRIX_CIRCUIT_NAMES[circuitId] ?? circuitId;
+}
 const TOURNAMENTS: Record<
   TournamentTheme,
   {
@@ -92,6 +125,13 @@ world_cup: {
   backgroundClass:
     "bg-gradient-to-br from-[#0D7A46] via-[#0B6B3A] to-[#084B29]",
   borderClass: "border-[#22A866]",
+},
+grand_prix: {
+  name: "Grand Prix",
+  logo: "/favicon.png",
+  backgroundClass:
+    "bg-gradient-to-br from-[#171717] via-[#8E111B] to-[#D3202F]",
+  borderClass: "border-[#D3202F]",
 },
 };
 type SpecialModesTab =
@@ -211,6 +251,7 @@ if (!user) {
           current_round_number,
           current_play_mode,
           created_at,
+          grand_prix_count,
           finished_at
           `
         )
@@ -218,6 +259,7 @@ if (!user) {
         .in("competition_type", [
   "grand_slam_final",
   "world_cup",
+  "grand_prix",
 ])
         .order("created_at", { ascending: false });
 
@@ -286,7 +328,32 @@ const {
     `
   )
   .in("competition_id", competitionIds);
+const {
+  data: grandPrixRows,
+  error: grandPrixError,
+} = await supabase
+  .from("competition_grand_prix")
+  .select(`
+    competition_id,
+    race_number,
+    circuit_id,
+    status
+  `)
+  .in("competition_id", competitionIds);
 
+if (grandPrixError) {
+  console.error(
+    "Erreur chargement des Grands Prix",
+    grandPrixError
+  );
+
+  setCompetitionsError(
+    "Impossible de charger la progression des saisons Grand Prix."
+  );
+
+  setLoadingCompetitions(false);
+  return;
+}
 if (matchesError) {
   console.error(
     "Erreur chargement matchs des compétitions",
@@ -305,7 +372,7 @@ if (matchesError) {
   setLoadingCompetitions(false);
   return;
 }
-      const competitionsWithPlayers = (
+     const competitionsWithPlayers = (
   (competitionRows ?? []) as Competition[]
 ).map((competition) => ({
   ...competition,
@@ -322,6 +389,13 @@ if (matchesError) {
   ).filter(
     (match) =>
       match.competition_id === competition.id
+  ),
+
+  grandPrixRaces: (
+    (grandPrixRows ?? []) as GrandPrixSummary[]
+  ).filter(
+    (race) =>
+      race.competition_id === competition.id
   ),
 }));
 
@@ -361,6 +435,17 @@ const competitionsChannel = supabase
       void loadCompetitions();
     }
   )
+  .on(
+  "postgres_changes",
+  {
+    event: "*",
+    schema: "public",
+    table: "competition_grand_prix",
+  },
+  () => {
+    void loadCompetitions();
+  }
+)
   .subscribe();
 
 return () => {
@@ -378,9 +463,21 @@ return () => {
   );
 const finishedCompetitions = useMemo(
   () =>
-    competitions.filter(
-      (competition) => competition.status === "finished"
-    ),
+    competitions
+      .filter(
+        (competition) => competition.status === "finished"
+      )
+      .sort((a, b) => {
+        const dateA = a.finished_at
+          ? new Date(a.finished_at).getTime()
+          : 0;
+
+        const dateB = b.finished_at
+          ? new Date(b.finished_at).getTime()
+          : 0;
+
+        return dateB - dateA;
+      }),
   [competitions]
 );
 
@@ -411,7 +508,10 @@ const worldCupFinished = finishedCompetitions.filter(
   (competition) =>
     competition.competition_type === "world_cup"
 );
-
+const grandPrixFinished = finishedCompetitions.filter(
+  (competition) =>
+    competition.competition_type === "grand_prix"
+);
 const grandSlamTitles = grandSlamFinished.filter(
   (competition) => {
     const me = competition.players.find(
@@ -426,6 +526,16 @@ const worldCupTitles = worldCupFinished.filter(
   (competition) => {
     const me = competition.players.find(
       (player) => player.profile_id === currentUserId
+    );
+
+    return me?.id === competition.winner_player_id;
+  }
+).length;
+const grandPrixTitles = grandPrixFinished.filter(
+  (competition) => {
+    const me = competition.players.find(
+      (player) =>
+        player.profile_id === currentUserId
     );
 
     return me?.id === competition.winner_player_id;
@@ -704,7 +814,7 @@ et construis ton palmarès.
 </div>
 
   {/* Contenu */}
-<div className="flex flex-col p-6">
+<div className="flex flex-1 flex-col p-6">
   <div>
     <p className="text-xs font-black uppercase tracking-widest text-[#C44934]">
       2 joueurs
@@ -720,7 +830,7 @@ et construis ton palmarès.
     </p>
   </div>
 
-  <div className="mt-5 space-y-4">
+  <div className="mt-auto space-y-4">
     <div className="flex flex-wrap gap-2 text-sm font-black">
       <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
         3 à 5 parties
@@ -918,7 +1028,7 @@ et construis ton palmarès.
   </div>
 </div>
 
-    <div className="flex flex-col p-6">
+    <div className="flex flex-1 flex-col p-6">
   <div>
     <p
       className="text-xs font-black uppercase tracking-widest"
@@ -937,7 +1047,7 @@ et construis ton palmarès.
     </p>
   </div>
 
-  <div className="mt-5 space-y-4">
+  <div className="mt-auto space-y-4">
     <div className="flex flex-wrap gap-2 text-sm font-black">
       <span
         className="rounded-full px-3 py-1 text-white"
@@ -991,6 +1101,183 @@ et construis ton palmarès.
   </div>
 </div>
   </button>
+  {/* Grand Prix */}
+<button
+  type="button"
+  onClick={() =>
+    router.push("/modes-speciaux/grand-prix")
+  }
+  className="group flex h-full flex-col overflow-hidden rounded-3xl border border-[#D3202F]/70 bg-[#F4E9DC] text-left text-black transition hover:-translate-y-1 hover:border-[#F13C49]"
+>
+  <div className="relative h-48 shrink-0 overflow-hidden bg-gradient-to-br from-[#171717] via-[#8E111B] to-[#D3202F]">
+    {/* Piste */}
+    <div className="absolute inset-0 opacity-25">
+      <div
+        className="absolute rounded-[45%]"
+        style={{
+          left: "7%",
+          right: "7%",
+          top: "15%",
+          bottom: "15%",
+          border: "26px solid rgba(0,0,0,0.8)",
+          transform: "rotate(-5deg)",
+        }}
+      />
+
+      <div
+        className="absolute rounded-[45%]"
+        style={{
+          left: "11%",
+          right: "11%",
+          top: "24%",
+          bottom: "24%",
+          border: "2px dashed rgba(255,255,255,0.9)",
+          transform: "rotate(-5deg)",
+        }}
+      />
+    </div>
+
+    {/* Damier */}
+    <div
+      className="absolute inset-x-0 bottom-0 h-8 opacity-30"
+      style={{
+        backgroundImage:
+          "linear-gradient(45deg, #fff 25%, transparent 25%), linear-gradient(-45deg, #fff 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #fff 75%), linear-gradient(-45deg, transparent 75%, #fff 75%)",
+        backgroundPosition:
+          "0 0, 0 8px, 8px -8px, -8px 0px",
+        backgroundSize: "16px 16px",
+      }}
+    />
+
+    <div className="absolute inset-0 flex items-center justify-center text-7xl transition group-hover:scale-110">
+      🏎️
+    </div>
+
+    <div className="absolute right-4 top-4 rounded-full bg-black/70 px-3 py-1 text-xs font-black uppercase text-white">
+      Disponible
+    </div>
+  </div>
+
+  <div className="flex flex-1 flex-col p-6">
+    <div>
+      <p className="text-xs font-black uppercase tracking-widest text-[#D3202F]">
+        2 à 6 joueurs
+      </p>
+
+      <h2 className="mt-2 text-2xl font-black">
+        Grand Prix
+      </h2>
+
+      <p className="mt-3 font-bold leading-relaxed text-[#5B4636]">
+        Disputez plusieurs Grands Prix, cumulez des points selon
+        votre classement et devenez champion de la saison.
+      </p>
+    </div>
+
+    <div className="mt-auto pt-5">
+      <div className="flex flex-wrap gap-2 text-sm font-black">
+        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+          3 à 7 GP
+        </span>
+
+        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+          Circuits aléatoires
+        </span>
+
+        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+          Classement par pts
+        </span>
+      </div>
+{grandPrixFinished.length > 0 && (
+  <div className="mt-4 flex flex-wrap gap-2 text-sm font-black text-[#D3202F]">
+    <span>
+      🏆 {grandPrixTitles}{" "}
+      {grandPrixTitles > 1 ? "titres" : "titre"}
+    </span>
+
+    <span className="text-[#9A7A68]">•</span>
+
+    <span>
+      🎮 {grandPrixFinished.length}{" "}
+      {grandPrixFinished.length > 1
+        ? "compétitions"
+        : "compétition"}
+    </span>
+  </div>
+)}
+      <div className="mt-5 flex items-center justify-between">
+        <span className="font-black text-[#D3202F]">
+          Découvrir le mode
+        </span>
+
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#D3202F]/15 text-[#D3202F] transition group-hover:bg-[#D3202F] group-hover:text-white">
+          <ChevronRight
+            className="h-6 w-6"
+            strokeWidth={3}
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</button>
+{/* À venir */}
+<div className="group flex h-full flex-col overflow-hidden rounded-3xl border border-slate-700 bg-[#F4E9DC] text-left text-black opacity-90">
+  <div className="relative flex h-48 items-center justify-center overflow-hidden bg-gradient-to-br from-[#111111] via-[#2A2A2A] to-[#444444]">
+
+    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08),transparent_70%)]" />
+
+    <div className="text-8xl opacity-70">
+      ❓
+    </div>
+
+    <div className="absolute right-4 top-4 rounded-full bg-black/70 px-3 py-1 text-xs font-black uppercase text-white">
+      Prochainement
+    </div>
+  </div>
+
+  <div className="flex flex-1 flex-col p-6">
+    <div>
+      <p className="text-xs font-black uppercase tracking-widest text-slate-500">
+        Nouveau mode
+      </p>
+
+      <h2 className="mt-2 text-2xl font-black">
+        À venir...
+      </h2>
+
+      <p className="mt-3 font-bold leading-relaxed text-[#5B4636]">
+        De nouveaux modes spéciaux sont en préparation.
+        Revenez bientôt pour découvrir la prochaine compétition.
+      </p>
+    </div>
+
+    <div className="mt-auto">
+      <div className="flex flex-wrap gap-2 text-sm font-black">
+        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+          Nouveaux défis
+        </span>
+
+        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+          Plus de formats
+        </span>
+
+        <span className="rounded-full bg-[#241A13] px-3 py-1 text-white">
+          Gratuit
+        </span>
+      </div>
+
+      <div className="mt-5 flex items-center justify-between">
+        <span className="font-black text-slate-500">
+          Bientôt disponible
+        </span>
+
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-300 text-slate-600">
+          ?
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </section>
 )}
 {activeTab === "active" && (
@@ -1034,18 +1321,36 @@ et construis ton palmarès.
             </div>
           ) : (
             <div className="mt-5 space-y-4">
-              {activeCompetitions.map((competition) =>
-  competition.competition_type === "world_cup" ? (
-    <WorldCupCompetitionCard
+              {activeCompetitions.map((competition) => {
+  if (competition.competition_type === "world_cup") {
+    return (
+      <WorldCupCompetitionCard
+        key={competition.id}
+        competition={competition}
+        onOpen={() =>
+          router.push(
+            `/modes-speciaux/coupe-du-monde/${competition.id}`
+          )
+        }
+      />
+    );
+  }
+
+  if (competition.competition_type === "grand_prix") {
+  return (
+    <GrandPrixCompetitionCard
       key={competition.id}
       competition={competition}
       onOpen={() =>
         router.push(
-          `/modes-speciaux/coupe-du-monde/${competition.id}`
+          `/modes-speciaux/grand-prix/${competition.id}`
         )
       }
     />
-  ) : (
+  );
+}
+
+  return (
     <CompetitionCard
       key={competition.id}
       competition={competition}
@@ -1055,8 +1360,8 @@ et construis ton palmarès.
         )
       }
     />
-  )
-)}
+  );
+})}
             </div>
           )}
         </section>
@@ -1077,29 +1382,47 @@ et construis ton palmarès.
   </div>
 )}
     <div className="mt-5 space-y-3">
-      {visibleFinishedCompetitions.map((competition) =>
-        competition.competition_type === "world_cup" ? (
-          <WorldCupCompetitionCard
-            key={competition.id}
-            competition={competition}
-            onOpen={() =>
-              router.push(
-                `/modes-speciaux/coupe-du-monde/${competition.id}`
-              )
-            }
-          />
-        ) : (
-          <CompetitionCard
-            key={competition.id}
-            competition={competition}
-            onOpen={() =>
-              router.push(
-                `/modes-speciaux/grand-chelem/${competition.id}`
-              )
-            }
-          />
+      {visibleFinishedCompetitions.map((competition) => {
+  if (competition.competition_type === "world_cup") {
+    return (
+      <WorldCupCompetitionCard
+        key={competition.id}
+        competition={competition}
+        onOpen={() =>
+          router.push(
+            `/modes-speciaux/coupe-du-monde/${competition.id}`
+          )
+        }
+      />
+    );
+  }
+
+  if (competition.competition_type === "grand_prix") {
+    return (
+      <GrandPrixCompetitionCard
+        key={competition.id}
+        competition={competition}
+        onOpen={() =>
+          router.push(
+            `/modes-speciaux/grand-prix/${competition.id}`
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <CompetitionCard
+      key={competition.id}
+      competition={competition}
+      onOpen={() =>
+        router.push(
+          `/modes-speciaux/grand-chelem/${competition.id}`
         )
-      )}
+      }
+    />
+  );
+})}
     </div>
     {finishedPageCount > 1 && (
   <div className="mt-6 flex items-center justify-between gap-3">
@@ -1155,18 +1478,36 @@ et construis ton palmarès.
     
 
     <div className="mt-5 space-y-3">
-      {visibleAbandonedCompetitions.map((competition) => 
-        competition.competition_type === "world_cup" ? (
-    <WorldCupCompetitionCard
-      key={competition.id}
-      competition={competition}
-      onOpen={() =>
-        router.push(
-          `/modes-speciaux/coupe-du-monde/${competition.id}`
-        )
-      }
-    />
-  ) : (
+      {visibleAbandonedCompetitions.map((competition) => {
+  if (competition.competition_type === "world_cup") {
+    return (
+      <WorldCupCompetitionCard
+        key={competition.id}
+        competition={competition}
+        onOpen={() =>
+          router.push(
+            `/modes-speciaux/coupe-du-monde/${competition.id}`
+          )
+        }
+      />
+    );
+  }
+
+  if (competition.competition_type === "grand_prix") {
+    return (
+      <GrandPrixCompetitionCard
+        key={competition.id}
+        competition={competition}
+        onOpen={() =>
+          router.push(
+            `/modes-speciaux/grand-prix/${competition.id}`
+          )
+        }
+      />
+    );
+  }
+
+  return (
     <CompetitionCard
       key={competition.id}
       competition={competition}
@@ -1176,8 +1517,8 @@ et construis ton palmarès.
         )
       }
     />
-  )
-)}
+  );
+})}
     </div>
     {abandonedPageCount > 1 && (
   <div className="mt-6 flex items-center justify-between gap-3">
@@ -1516,6 +1857,219 @@ function WorldCupStatusBadge({
 
   return (
     <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase text-white">
+      À continuer
+    </span>
+  );
+}
+function GrandPrixCompetitionCard({
+  competition,
+  onOpen,
+}: {
+  competition: CompetitionWithPlayers;
+  onOpen: () => void;
+}) {
+  const isFinished = competition.status === "finished";
+  const isAbandoned = competition.status === "abandoned";
+const playingRace =
+  competition.grandPrixRaces.find(
+    (race) => race.status === "playing"
+  ) ?? null;
+
+const nextRace =
+  competition.grandPrixRaces
+    .filter((race) => race.status === "waiting")
+    .sort((a, b) => a.race_number - b.race_number)[0] ?? null;
+
+const displayedRace = playingRace ?? nextRace;
+ const completedRaceCount =
+  competition.grandPrixRaces.filter(
+    (race) => race.status === "finished"
+  ).length;
+
+  const totalRaceCount =
+    competition.grand_prix_count ?? 0;
+
+  const progress =
+    totalRaceCount > 0
+      ? Math.round(
+          (completedRaceCount / totalRaceCount) * 100
+        )
+      : 0;
+
+  const champion =
+  competition.players.find(
+    (player) =>
+      player.id === competition.winner_player_id
+  ) ?? null;
+
+  let buttonLabel = "Voir la saison";
+
+  if (isFinished) {
+    buttonLabel = "Voir le classement final";
+  } else if (isAbandoned) {
+    buttonLabel = "Voir la saison abandonnée";
+  } else if (
+    competition.current_round_number !== null &&
+    competition.current_play_mode !== null
+  ) {
+    buttonLabel = "Reprendre le Grand Prix";
+  } else if (completedRaceCount > 0) {
+    buttonLabel = "Continuer la saison";
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group w-full overflow-hidden rounded-3xl border border-[#D3202F]/60 bg-[#111111] text-left text-white transition hover:-translate-y-1 hover:border-[#F13C49]"
+    >
+      <div className="relative overflow-hidden border-b border-white/10 bg-gradient-to-br from-[#171717] via-[#8E111B] to-[#D3202F] px-6 py-5">
+        <div className="absolute inset-0 opacity-20">
+          <div className="absolute -right-16 -top-20 h-56 w-56 rounded-full border-[28px] border-black/70" />
+          <div className="absolute -bottom-20 -left-16 h-56 w-56 rounded-full border-[28px] border-black/70" />
+        </div>
+
+        <div className="relative flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-red-200">
+              🏎️ Saison Grand Prix
+            </p>
+
+            <h3 className="mt-2 text-2xl font-black">
+              Championnat · {competition.column_mode} colonnes
+            </h3>
+
+            <p className="mt-2 font-bold text-white/65">
+              {competition.players.length} pilotes ·{" "}
+              {totalRaceCount} Grands Prix
+            </p>
+          </div>
+
+          <GrandPrixStatusBadge
+  competition={competition}
+/>
+        </div>
+      </div>
+
+      <div className="p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-black uppercase tracking-widest text-white/45">
+              Progression
+            </p>
+
+            <p className="mt-1 text-xl font-black">
+              {completedRaceCount} / {totalRaceCount} GP terminés
+            </p>
+          </div>
+
+          <div className="text-right">
+            <p className="text-3xl font-black text-[#F13C49]">
+              {progress}%
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
+  <div
+    className="h-full rounded-full transition-all duration-500"
+    style={{
+      width: `${progress}%`,
+      background:
+        "linear-gradient(90deg, #8E111B 0%, #F13C49 100%)",
+    }}
+  />
+</div>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {competition.players.slice(0, 6).map((player) => (
+            <span
+              key={player.id}
+              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-black text-white/75"
+            >
+              {player.player_name}
+            </span>
+          ))}
+        </div>
+
+        {!isFinished && !isAbandoned && displayedRace && (
+  <div className="mt-5 rounded-2xl border border-[#D3202F]/40 bg-[#D3202F]/10 p-4">
+    <p className="text-xs font-black uppercase tracking-widest text-[#F13C49]">
+      {playingRace
+        ? "Grand Prix en cours"
+        : "Prochain Grand Prix"}
+    </p>
+
+    <p className="mt-1 font-black">
+      Manche {displayedRace.race_number} ·{" "}
+      {getGrandPrixCircuitName(displayedRace.circuit_id)}
+    </p>
+  </div>
+)}
+
+        {isFinished && champion && (
+          <div className="mt-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4">
+            <p className="text-xs font-black uppercase tracking-widest text-amber-300">
+              Champion
+            </p>
+
+            <p className="mt-1 text-lg font-black">
+              🏆 {champion.player_name}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-6 flex items-center justify-between">
+          <span className="font-black text-[#F13C49]">
+            {buttonLabel}
+          </span>
+
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#D3202F]/15 text-[#F13C49] transition group-hover:bg-[#D3202F] group-hover:text-white">
+            <ChevronRight
+              className="h-6 w-6"
+              strokeWidth={3}
+            />
+          </div>
+        </div>
+      </div>
+    </button>
+  );
+}
+function GrandPrixStatusBadge({
+  competition,
+}: {
+  competition: CompetitionWithPlayers;
+}) {
+  if (competition.status === "finished") {
+    return (
+      <span className="rounded-full border border-[#F7E3A5]/60 bg-[#F2D27A] px-3 py-1 text-xs font-black uppercase text-[#5C4300]">
+        Terminée
+      </span>
+    );
+  }
+
+  if (competition.status === "abandoned") {
+    return (
+      <span className="rounded-full border border-[#E2D8D0]/60 bg-[#C9BCB1] px-3 py-1 text-xs font-black uppercase text-[#433A34]">
+        Abandonnée
+      </span>
+    );
+  }
+
+  const playingRace =
+    competition.grandPrixRaces.find(
+      (race) => race.status === "playing"
+    );
+
+  if (playingRace) {
+    return (
+      <span className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-black uppercase text-amber-200">
+        GP {playingRace.race_number} en cours
+      </span>
+    );
+  }
+
+  return (
+    <span className="rounded-full bg-white/15 px-3 py-1 text-xs font-black uppercase text-white/80">
       À continuer
     </span>
   );

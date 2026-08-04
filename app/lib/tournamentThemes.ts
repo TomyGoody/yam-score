@@ -3,38 +3,92 @@ import type {
 } from "./competitionTypes";
 
 export type TournamentTheme =
-CompetitionTheme;
+  CompetitionTheme;
+
+export type GrandPrixCircuitId =
+  | "melbourne"
+  | "bahrain"
+  | "jeddah"
+  | "suzuka"
+  | "shanghai"
+  | "imola"
+  | "monaco"
+  | "barcelona"
+  | "montreal"
+  | "spielberg"
+  | "silverstone"
+  | "spa"
+  | "zandvoort"
+  | "monza"
+  | "singapore"
+  | "austin"
+  | "mexico"
+  | "interlagos"
+  | "abu_dhabi";
+
+export type VisualThemeId =
+  | TournamentTheme
+  | GrandPrixCircuitId;
 
 export type TournamentThemeConfig = {
-  id: TournamentTheme;
+  id: VisualThemeId;
+
   name: string;
   shortName: string;
   icon: string;
-  
+flagImage?: string;
   pageBackgroundColor: string;
   panelBackgroundColor: string;
   border: string;
-  
+
   accentBackground: string;
   accentText: string;
-  accentDarkText: string; 
+  accentDarkText: string;
+
   courtBackground: string;
   courtLine: string;
-  
+
   scoreBackground: string;
   scoreText: string;
-  
+
   buttonBackground: string;
   buttonHover: string;
   buttonText: string;
-  
-  backgroundImage: string;
-  backgroundGlow: string;
+
+  backgroundImage?: string;
+  backgroundGlow?: string;
 
   headerGradient: string;
   headerLogo: string;
-};
 
+  sheet?: {
+    cardBackground: string;
+    cardBorder: string;
+
+    totalBackground: string;
+    totalText: string;
+
+    finalBackground: string;
+    finalText: string;
+
+    diceBorder: string;
+    diceDot: string;
+
+    scoreText: string;
+    activeText: string;
+  };
+
+  leaderboard?: {
+    border: string;
+    background: string;
+
+    titleText: string;
+    rankText: string;
+
+    cardBorder: string;
+    cardBackground: string;
+  };
+};
 export const TOURNAMENT_THEMES: Record<
 TournamentTheme,
 TournamentThemeConfig

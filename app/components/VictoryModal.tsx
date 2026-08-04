@@ -43,7 +43,11 @@ export default function VictoryModal({
   onBackHome: () => void;
   onViewGrid?: () => void;
   tournamentTheme?: TournamentThemeConfig | null;
-  competitionType?: "grand_slam_final" | "world_cup" | null;
+  competitionType?:
+  | "world_cup"
+  | "grand_slam_final"
+  | "grand_prix"
+  | null;
   competitionFinished?: boolean;
   isFinalizing?: boolean;
 }) {
@@ -53,16 +57,23 @@ const isGrandSlam =
 
 const isWorldCup =
   competitionType === "world_cup";
-
+const isGrandPrix =
+  competitionType === "grand_prix";
 const isWorldCupChampion =
   isWorldCup && competitionFinished;
 
 const winner = players[0] ?? null;
+const GRAND_PRIX_POINTS = [25, 18, 15, 12, 10, 8];
+
+function getGrandPrixPoints(rank: number) {
+  return GRAND_PRIX_POINTS[rank - 1] ?? 0;
+}
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 px-4 py-4">
+  <div className="flex min-h-full items-start justify-center">
   <div
     className={[
-      "relative w-full max-w-lg overflow-hidden rounded-3xl border-2 p-6 text-white shadow-2xl",
+      "relative my-auto w-full max-w-lg overflow-hidden rounded-3xl border-2 p-6 text-white shadow-2xl",
       tournamentTheme
         ? tournamentTheme.border
         : "border-[#9B6A28] bg-black",
@@ -86,14 +97,29 @@ const winner = players[0] ?? null;
 <div className="relative z-10">
  {tournamentTheme ? (
   <div className="flex justify-center">
-    <Image
-      src={tournamentTheme.headerLogo}
-      alt={tournamentTheme.name}
-      width={96}
-      height={96}
-      className="h-24 w-auto object-contain drop-shadow-xl"
-      priority
-    />
+    {tournamentTheme.flagImage ? (
+      <Image
+        src={tournamentTheme.flagImage}
+        alt={`Drapeau — ${tournamentTheme.name}`}
+        width={96}
+        height={64}
+        className="h-16 w-auto rounded-md object-contain shadow-xl"
+        priority
+      />
+    ) : tournamentTheme.headerLogo ? (
+      <Image
+        src={tournamentTheme.headerLogo}
+        alt={tournamentTheme.name}
+        width={96}
+        height={96}
+        className="h-24 w-auto object-contain drop-shadow-xl"
+        priority
+      />
+    ) : (
+      <div className="text-6xl">
+        {tournamentTheme.icon}
+      </div>
+    )}
   </div>
 ) : (
   <div className="text-6xl">🏆</div>
@@ -110,24 +136,32 @@ const winner = players[0] ?? null;
   ].join(" ")}
 >
   {isWorldCupChampion
-    ? "Coupe du Monde remportée"
-    : isWorldCup
-      ? "Match remporté"
-      : isGrandSlam
-        ? "Set remporté"
+  ? "Coupe du Monde remportée"
+  : isWorldCup
+    ? "Match remporté"
+    : isGrandSlam
+      ? "Set remporté"
+      : isGrandPrix
+        ? "Grand Prix terminé"
         : "Partie terminée"}
 </p>
 
 <h2 className="mt-2 text-3xl font-black">
   {isWorldCupChampion
+  ? winner?.name
+  : isWorldCup
     ? winner?.name
-    : isWorldCup
+    : isGrandSlam
       ? winner?.name
-      : isGrandSlam
+      : isGrandPrix
         ? winner?.name
         : "Classement final"}
 </h2>
-
+{isGrandPrix && tournamentTheme && (
+  <p className="mt-2 text-white/70">
+    Remporte le {tournamentTheme.name}
+  </p>
+)}
 {isWorldCupChampion && (
   <p className="mt-2 text-white/70">
     Champion du monde YamScore
@@ -149,10 +183,12 @@ const winner = players[0] ?? null;
         <div className="mt-6 grid gap-3">
           {players.map((player) => {
             const xp = xpResults[player.id];
+            const grandPrixPoints = isGrandPrix
+  ? getGrandPrixPoints(player.rank)
+  : null;
             const playerOrder = player.player_order ?? player.playerOrder;
-const isLightPlayerCard = tournamentTheme
-  ? player.rank === 1
-  : player.rank !== 1;
+const useDarkXpText =
+  !tournamentTheme && player.rank !== 1;
             return (
               <div
                 key={player.id}
@@ -187,16 +223,26 @@ const isLightPlayerCard = tournamentTheme
                     )}
                   </div>
 
-                  <div className="text-2xl">{player.total}</div>
+                  <div className="text-right">
+  <div className="text-2xl">
+    {player.total}
+  </div>
+
+  {grandPrixPoints !== null && (
+    <div className="mt-1 text-sm font-black opacity-70">
+      +{grandPrixPoints} pts championnat
+    </div>
+  )}
+</div>
                 </div>
 
                 {isFinalizing ? (
   <div
     className={[
       "mt-3 flex items-center justify-center gap-2 rounded-xl p-3 text-sm font-black",
-      isLightPlayerCard
-        ? "bg-black/10 text-[#241812]"
-        : "bg-white/10 text-white",
+      useDarkXpText
+  ? "bg-black/10 text-[#241812]"
+  : "bg-white/10 text-white"
     ].join(" ")}
   >
     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -213,9 +259,9 @@ const isLightPlayerCard = tournamentTheme
       }
       className={[
         "flex w-full items-center justify-between rounded-xl p-3 text-left text-sm font-black transition",
-        isLightPlayerCard
-          ? "bg-black/10 text-[#241812] hover:bg-black/15"
-          : "bg-white/10 text-white hover:bg-white/15",
+        useDarkXpText
+  ? "bg-black/10 text-[#241812] hover:bg-black/15"
+  : "bg-white/10 text-white hover:bg-white/15"
       ].join(" ")}
     >
       <span>
@@ -225,9 +271,9 @@ const isLightPlayerCard = tournamentTheme
           <span
             className={[
               "ml-2 rounded-full px-2 py-0.5",
-              isLightPlayerCard
-                ? "bg-emerald-600/15 text-emerald-800"
-                : "bg-emerald-400/20 text-emerald-300",
+              useDarkXpText
+  ? "bg-emerald-600/15 text-emerald-800"
+  : "bg-emerald-400/20 text-emerald-300",
             ].join(" ")}
           >
             +{xp.newLevel - xp.oldLevel}
@@ -245,9 +291,9 @@ const isLightPlayerCard = tournamentTheme
       <div
         className={[
           "mt-2 rounded-xl p-3 text-left text-xs font-black",
-          isLightPlayerCard
-            ? "bg-black/10 text-[#241812]"
-            : "bg-white/10 text-white",
+          useDarkXpText
+  ? "bg-black/10 text-[#241812]"
+  : "bg-white/10 text-white"
         ].join(" ")}
       >
         <div className="flex justify-between">
@@ -312,8 +358,11 @@ const isLightPlayerCard = tournamentTheme
       ? "Retour à la Coupe du Monde"
       : isGrandSlam
         ? "Retour à la finale"
-        : "Retour accueil"}
+        : isGrandPrix
+          ? "Retour à la saison"
+          : "Retour accueil"}
   </button>
+</div>
 </div>
         </div>
       </div>

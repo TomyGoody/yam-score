@@ -1,0 +1,192 @@
+[
+  {
+    "id": "melbourne",
+    "file": "melbourne.svg",
+    "source": "au-1953.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/au-1953.geojson",
+    "name": "Albert Park Circuit",
+    "location": "Melbourne",
+    "accent": "#55C2E8",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "bahrain",
+    "file": "bahrain.svg",
+    "source": "bh-2002.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/bh-2002.geojson",
+    "name": "Bahrain International Circuit",
+    "location": "Sakhir",
+    "accent": "#E7B35A",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "jeddah",
+    "file": "jeddah.svg",
+    "source": "sa-2021.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/sa-2021.geojson",
+    "name": "Jeddah Corniche Circuit",
+    "location": "Jeddah",
+    "accent": "#48C78E",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "suzuka",
+    "file": "suzuka.svg",
+    "source": "jp-1962.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/jp-1962.geojson",
+    "name": "Suzuka International Racing Course",
+    "location": "Suzuka",
+    "accent": "#F05A67",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "shanghai",
+    "file": "shanghai.svg",
+    "source": "cn-2004.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/cn-2004.geojson",
+    "name": "Shanghai International Circuit",
+    "location": "Shanghai",
+    "accent": "#F1C75B",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "imola",
+    "file": "imola.svg",
+    "source": "it-1953.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/it-1953.geojson",
+    "name": "Autodromo Enzo e Dino Ferrari",
+    "location": "Imola",
+    "accent": "#57C28B",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "monaco",
+    "file": "monaco.svg",
+    "source": "mc-1929.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/mc-1929.geojson",
+    "name": "Circuit de Monaco",
+    "location": "Monaco",
+    "accent": "#F04A54",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "barcelona",
+    "file": "barcelona.svg",
+    "source": "es-1991.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/es-1991.geojson",
+    "name": "Circuit de Barcelona-Catalunya",
+    "location": "Barcelona",
+    "accent": "#F4C64E",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "montreal",
+    "file": "montreal.svg",
+    "source": "ca-1978.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/ca-1978.geojson",
+    "name": "Circuit Gilles-Villeneuve",
+    "location": "Montreal",
+    "accent": "#F06464",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "spielberg",
+    "file": "spielberg.svg",
+    "source": "at-1969.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/at-1969.geojson",
+    "name": "Red Bull Ring",
+    "location": "Spielberg",
+    "accent": "#F15B64",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "silverstone",
+    "file": "silverstone.svg",
+    "source": "gb-1948.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/gb-1948.geojson",
+    "name": "Silverstone Circuit",
+    "location": "Silverstone",
+    "accent": "#6E96F2",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "spa",
+    "file": "spa.svg",
+    "source": "be-1925.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/be-1925.geojson",
+    "name": "Circuit de Spa-Francorchamps",
+    "location": "Spa Francorchamps",
+    "accent": "#E3C64B",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "zandvoort",
+    "file": "zandvoort.svg",
+    "source": "nl-1948.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/nl-1948.geojson",
+    "name": "Circuit Zandvoort",
+    "location": "Zandvoort",
+    "accent": "#F3934E",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "monza",
+    "file": "monza.svg",
+    "source": "it-1922.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/it-1922.geojson",
+    "name": "Autodromo Nazionale Monza",
+    "location": "Monza",
+    "accent": "#58C58C",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "singapore",
+    "file": "singapore.svg",
+    "source": "sg-2008.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/sg-2008.geojson",
+    "name": "Marina Bay Street Circuit",
+    "location": "Singapore",
+    "accent": "#BE78EE",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "austin",
+    "file": "austin.svg",
+    "source": "us-2012.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/us-2012.geojson",
+    "name": "Circuit of the Americas",
+    "location": "Austin",
+    "accent": "#678DE9",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "mexico",
+    "file": "mexico.svg",
+    "source": "mx-1962.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/mx-1962.geojson",
+    "name": "Autódromo Hermanos Rodríguez",
+    "location": "Mexico City",
+    "accent": "#52BB83",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "interlagos",
+    "file": "interlagos.svg",
+    "source": "br-1940.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/br-1940.geojson",
+    "name": "Autódromo José Carlos Pace - Interlagos",
+    "location": "Sao Paulo",
+    "accent": "#E2C84E",
+    "viewBox": "0 0 1000 700"
+  },
+  {
+    "id": "abu_dhabi",
+    "file": "abu_dhabi.svg",
+    "source": "ae-2009.geojson",
+    "sourceUrl": "https://raw.githubusercontent.com/bacinger/f1-circuits/master/circuits/ae-2009.geojson",
+    "name": "Yas Marina Circuit",
+    "location": "Yas Marina",
+    "accent": "#58C5B8",
+    "viewBox": "0 0 1000 700"
+  }
+]

@@ -26,6 +26,8 @@ export default function Leaderboard({
       straights: number;
       fourOfAKinds: number;
       yams: number;
+      championshipPoints: number | null;
+provisionalGrandPrixPoints: number;
     }
   >;
   layout: "side" | "bottom";
@@ -35,31 +37,55 @@ export default function Leaderboard({
   tournamentTheme?: TournamentThemeConfig | null;
 }) {
   if (players.length === 0) return null;
+const leaderboardTheme =
+  tournamentTheme?.leaderboard ?? null;
 
+const hasCustomLeaderboardTheme =
+  Boolean(leaderboardTheme);
   return (
     <aside
   className={[
     "rounded-xl border p-3 shadow-xl",
     layout === "side" ? "w-64 shrink-0" : "w-full shrink-0",
-    tournamentTheme
-      ? `${tournamentTheme.border} bg-black/35 backdrop-blur-sm`
-      : "border-[#8B5A2B] bg-black/70",
+    !hasCustomLeaderboardTheme
+      ? tournamentTheme
+        ? `${tournamentTheme.border} bg-black/35 backdrop-blur-sm`
+        : "border-[#8B5A2B] bg-black/70"
+      : "",
   ].join(" ")}
+  style={
+    leaderboardTheme
+      ? {
+          borderColor: leaderboardTheme.border,
+          background: leaderboardTheme.background,
+        }
+      : undefined
+  }
 >
       <h3
   className={[
     "mb-3 text-lg font-black uppercase tracking-wide",
-    tournamentTheme
-      ? tournamentTheme.accentText
-      : "text-[#F7EFE6]",
+    !leaderboardTheme
+      ? tournamentTheme
+        ? tournamentTheme.accentText
+        : "text-[#F7EFE6]"
+      : "",
   ].join(" ")}
+  style={{
+    color: leaderboardTheme?.titleText,
+  }}
 >
   {gameFinished ? "🏆 Partie terminée" : "Classement"}
 </h3>
 {onUndoLastMove && !gameFinished && (
   <button
     onClick={onUndoLastMove}
-    className="mb-3 w-full rounded-lg bg-[#C44934] px-3 py-2 text-xs font-black text-white hover:bg-[#D75A43]"
+    className={[
+      "mb-3 w-full rounded-lg px-3 py-2 text-xs font-black text-white transition",
+      tournamentTheme
+        ? `${tournamentTheme.buttonBackground} ${tournamentTheme.buttonHover}`
+        : "bg-[#C44934] hover:bg-[#D75A43]",
+    ].join(" ")}
   >
     Annuler le dernier coup
   </button>
@@ -73,74 +99,143 @@ export default function Leaderboard({
   ].join(" ")}
 >
         {players.map((player) => {
- const playerTextClass = tournamentTheme
-  ? "text-[#241812]"
-  : "text-[#F7EFE6]";
+ const playerTextClass =
+  leaderboardTheme
+    ? "text-white"
+    : tournamentTheme
+      ? "text-[#241812]"
+      : "text-[#F7EFE6]";
 
   return (
     <div
   key={player.id}
   className={[
-  "shrink-0 rounded-xl border p-4 font-black",
-  layout === "side" ? "w-full" : "min-w-56",
-  tournamentTheme
-    ? `${tournamentTheme.border} bg-[#F4E9DC] text-[#241812]`
-    : "border-[#B87942] bg-black/50 text-white",
-].join(" ")}
->
-  <div className="flex items-start justify-between">
-    <span
-  className={[
-    "text-xl font-black",
-    tournamentTheme
-      ? tournamentTheme.accentDarkText
-      : "text-[#B84332]",
+    "shrink-0 rounded-xl border p-3 font-black",
+    layout === "side" ? "w-full" : "w-48",
+    !leaderboardTheme
+      ? tournamentTheme
+        ? `${tournamentTheme.border} bg-[#F4E9DC] text-[#241812]`
+        : "border-[#B87942] bg-black/50 text-white"
+      : "text-white",
   ].join(" ")}
+  style={
+    leaderboardTheme
+      ? {
+          borderColor: leaderboardTheme.cardBorder,
+          background: leaderboardTheme.cardBackground,
+        }
+      : undefined
+  }
 >
-      #{player.rank}
-    </span>
+  <div className="flex items-start justify-between gap-3">
+  <span
+    className={[
+      "text-xl font-black",
+      !leaderboardTheme
+        ? tournamentTheme
+          ? tournamentTheme.accentDarkText
+          : "text-[#B84332]"
+        : "",
+    ].join(" ")}
+    style={{
+      color: leaderboardTheme?.rankText,
+    }}
+  >
+    #{player.rank}
+  </span>
 
-    {player.gap > 0 && (
-      <span className="rounded-md bg-[#C44934] px-2 py-1 text-sm text-white">
-        -{player.gap}
-      </span>
+  <div className="leading-tight text-right">
+    {player.championshipPoints !== null && (
+      <>
+        <div
+          className={[
+            "text-[10px] font-black uppercase tracking-widest",
+            !leaderboardTheme
+              ? tournamentTheme
+                ? tournamentTheme.accentDarkText
+                : "text-[#C44934]"
+              : "",
+          ].join(" ")}
+          style={{
+            color: leaderboardTheme?.rankText,
+          }}
+        >
+          Championnat
+        </div>
+
+        <div
+          className={[
+            "text-lg font-black",
+            playerTextClass,
+          ].join(" ")}
+        >
+          {player.championshipPoints} pts
+        </div>
+
+        <div
+          className={[
+            "text-[10px] font-black opacity-60",
+            playerTextClass,
+          ].join(" ")}
+        >
+          +{player.provisionalGrandPrixPoints} provisoires
+        </div>
+      </>
     )}
-  </div>
 
-  <div
-  className={[
-    "mt-2 text-4xl font-black",
-    playerTextClass,
-  ].join(" ")}
->
-  {player.total}
+    
+  </div>
 </div>
 
- <div
+<div className="mt-1 flex items-center gap-2">
+  <div
+    className={[
+      "text-3xl font-black",
+      playerTextClass,
+    ].join(" ")}
+  >
+    {player.total}
+  </div>
+
+  {player.gap > 0 && (
+    <span className="rounded-md bg-[#C44934] px-2 py-0.5 text-[10px] text-white">
+      -{player.gap}
+    </span>
+  )}
+</div>
+
+<div
   className={[
-    "mt-2 text-xl font-black",
+    "mt-0.5 text-base font-black",
     playerTextClass,
   ].join(" ")}
 >
   {player.name}
 </div>
 
-  {!gameFinished && player.id === currentPlayerId && (
+{!gameFinished && player.id === currentPlayerId && (
   <div
     className={[
-      "mt-2 text-xs font-black",
-      tournamentTheme
-        ? tournamentTheme.accentDarkText
-        : "text-[#B84332]",
+      "mt-1 text-[10px] font-black",
+      leaderboardTheme
+        ? ""
+        : tournamentTheme
+          ? tournamentTheme.accentDarkText
+          : "text-[#B84332]",
     ].join(" ")}
+    style={{
+      color:
+        tournamentTheme?.sheet?.activeText ??
+        undefined,
+    }}
   >
     ▶ Ton tour
   </div>
 )}
 
-  <div
+<div
   className={[
-    "mt-3 text-sm font-bold",
+    "mt-2 text-[10px] font-bold",
     playerTextClass,
   ].join(" ")}
 >
@@ -151,7 +246,7 @@ export default function Leaderboard({
 
 <div
   className={[
-    "mt-3 flex gap-4 text-xs font-black",
+    "mt-1 flex gap-3 text-[10px] font-black",
     playerTextClass,
   ].join(" ")}
 >

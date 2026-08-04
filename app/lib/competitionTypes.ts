@@ -1,15 +1,7 @@
 export type CompetitionType =
   | "grand_slam_final"
-  | "world_cup";
-
-/*
-  On pourra ensuite ajouter facilement :
-
-  | "league"
-  | "cup"
-  | "championship"
-  | "survival"
-*/
+  | "world_cup"
+  | "grand_prix";
 
 export type GrandSlamTheme =
   | "australian_open"
@@ -24,7 +16,6 @@ export type CompetitionTheme =
 type CompetitionHeaderBase = {
   competitionId: string;
   competitionType: CompetitionType;
-
   theme: CompetitionTheme;
 
   tournamentName: string;
@@ -47,6 +38,14 @@ export type WorldCupCompetitionHeader =
     matchId: string | null;
   };
 
+export type GrandPrixCompetitionHeader =
+  CompetitionHeaderBase & {
+    competitionType: "grand_prix";
+
+    circuitId: string | null;
+  };
+
 export type CompetitionHeaderData =
   | GrandSlamCompetitionHeader
-  | WorldCupCompetitionHeader;
+  | WorldCupCompetitionHeader
+  | GrandPrixCompetitionHeader;

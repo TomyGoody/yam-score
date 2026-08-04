@@ -7,6 +7,7 @@ import Cropper from "react-easy-crop";
 import { syncProfileAchievements } from "../lib/syncProfileAchievements";
 import LoadingScreen from "@/app/components/LoadingScreen";
 import { syncMissingGameXp } from "../lib/syncMissingGameXp";
+import { rebuildAllProfiles } from "../lib/rebuildAllProfiles";
 import {
   WIN_STREAK_MILESTONES,
   DEFAULT_MILESTONES,
@@ -17,6 +18,8 @@ import {
   EXPLOIT_WIN_STREAK,
   GRAND_SLAM_WIN_MILESTONES,
   WORLD_CUP_MILESTONES,
+  GRAND_PRIX_MILESTONES,
+  GRAND_PRIX_TITLE_MILESTONES,
 } from "../lib/xpRules";
 import {
   LEVEL_XP,
@@ -163,6 +166,14 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [achievementStats, setAchievementStats] = useState<any>(null);
   const [progress, setProgress] = useState<any>(null);
+  const [isRebuildingAllProfiles, setIsRebuildingAllProfiles] =
+  useState(false);
+
+const [rebuildAllResult, setRebuildAllResult] = useState<{
+  success: number;
+  failed: number;
+  totalXpAwarded: number;
+} | null>(null);
   type GameMode = "6cols" | "3cols";
   type ProfileTab =
   | "dashboard"
@@ -170,6 +181,7 @@ export default function ProfilePage() {
   | "history"
   | "achievements";
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -228,7 +240,18 @@ const HISTORY_PER_PAGE = 10;
         router.push("/");
         return;
       }
-      
+      const { data: adminRow, error: adminError } = await supabase
+  .from("admin_users")
+  .select("user_id")
+  .eq("user_id", ensuredProfile.id)
+  .maybeSingle();
+
+if (adminError) {
+  console.error("Erreur vérification admin", adminError);
+  setIsAdmin(false);
+} else {
+  setIsAdmin(Boolean(adminRow));
+}
       const { data: profileData, error: profileError } = await supabase
       .from("profiles")
       .select("id, username, display_name, avatar_url, avatar_customized")
@@ -1003,17 +1026,106 @@ const paginatedHistory = sortedHistory.slice(
   (historyPage - 1) * HISTORY_PER_PAGE,
   historyPage * HISTORY_PER_PAGE
 );
+async function handleRebuildAllProfiles() {
+  if (isRebuildingAllProfiles) return;
 
+  const confirmed = window.confirm(
+    "Recalculer les statistiques de tous les profils ?"
+  );
+
+  if (!confirmed) return;
+
+  setIsRebuildingAllProfiles(true);
+  setRebuildAllResult(null);
+
+  try {
+    const result = await rebuildAllProfiles();
+
+    setRebuildAllResult(result);
+
+    if (profile?.id) {
+  const [
+    { data: refreshedStats, error: statsError },
+    { data: refreshedProgress, error: progressError },
+  ] = await Promise.all([
+    supabase
+      .from("profile_stats")
+      .select("*")
+      .eq("profile_id", profile.id)
+      .maybeSingle(),
+
+    supabase
+      .from("profile_progress")
+      .select("*")
+      .eq("profile_id", profile.id)
+      .maybeSingle(),
+  ]);
+
+  if (statsError) {
+    console.error(
+      "Erreur rechargement des statistiques après rebuild",
+      statsError
+    );
+  } else {
+    setAchievementStats(refreshedStats);
+  }
+
+  if (progressError) {
+    console.error(
+      "Erreur rechargement de l’XP après rebuild",
+      progressError
+    );
+  } else {
+    setProgress(refreshedProgress);
+  }
+}
+  } catch (error) {
+    console.error("Erreur rebuild global", error);
+
+    setRebuildAllResult({
+      success: 0,
+      failed: 1,
+      totalXpAwarded: 0,
+    });
+  } finally {
+    setIsRebuildingAllProfiles(false);
+  }
+}
         return (
           <main className="min-h-screen bg-black px-4 py-8 text-white">
           <div className="mx-auto max-w-6xl">
-          <button
-          onClick={() => router.push("/")}
-          className="mb-6 rounded-xl bg-[#241A13] px-4 py-2 font-black text-white hover:bg-[#322217]"
-          >
-          Retour
-          </button>
-          
+          <div className="mb-6 flex flex-wrap gap-3">
+  <button
+    onClick={() => router.push("/")}
+    className="rounded-xl bg-[#241A13] px-4 py-2 font-black text-white hover:bg-[#322217]"
+  >
+    Retour
+  </button>
+
+  {isAdmin && (
+  <button
+    type="button"
+    onClick={() => void handleRebuildAllProfiles()}
+    disabled={isRebuildingAllProfiles}
+    className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-4 py-2 font-black text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {isRebuildingAllProfiles
+      ? "Rebuild en cours…"
+      : "Rebuild global des stats"}
+  </button>
+)}
+</div>
+
+{isAdmin && rebuildAllResult && (
+  <div className="mb-6 rounded-xl border border-slate-800 bg-slate-950 px-4 py-3 text-sm font-bold">
+    {rebuildAllResult.success} profil
+    {rebuildAllResult.success > 1 ? "s" : ""} recalculé
+    {rebuildAllResult.success > 1 ? "s" : ""} ·{" "}
+    {rebuildAllResult.failed} échec
+    {rebuildAllResult.failed > 1 ? "s" : ""} ·{" "}
+    {rebuildAllResult.totalXpAwarded} XP attribuée
+  </div>
+)}
           <section className="rounded-3xl border border-[#9B6A28]/70 bg-black p-6 shadow-2xl">
           <div className="flex items-center gap-4">
           <button
@@ -2072,6 +2184,28 @@ const paginatedHistory = sortedHistory.slice(
       achievementStats?.world_cup_wins ?? 0
     }
     milestones={WORLD_CUP_MILESTONES}
+  />
+</AchievementSection>
+<AchievementSection title="🏎️ Grand Prix">
+  <AchievementCard
+    icon="🏁"
+    title="Grands Prix remportés"
+    value={achievementStats?.grand_prix_wins ?? 0}
+    milestones={GRAND_PRIX_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🥇"
+    title="Podiums"
+    value={achievementStats?.grand_prix_podiums ?? 0}
+    milestones={GRAND_PRIX_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🏆"
+    title="Championnats remportés"
+    value={achievementStats?.grand_prix_titles ?? 0}
+    milestones={GRAND_PRIX_TITLE_MILESTONES}
   />
 </AchievementSection>
                 <AchievementSection title="🏅 Exploits">

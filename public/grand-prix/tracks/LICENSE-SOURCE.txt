@@ -1,0 +1,8 @@
+Track geometry source:
+bacinger/f1-circuits
+https://github.com/bacinger/f1-circuits
+
+License: MIT
+Copyright (c) 2019-2025 Tomislav Bacinger
+
+The SVG presentation and normalization were generated for YamScore.

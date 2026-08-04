@@ -187,10 +187,10 @@ function countFigure(playerKey: string, rowId: YamRow) {
   <main className="min-h-screen overflow-y-auto bg-black text-white">
     <div className="flex h-12 items-center justify-between border-b border-slate-800 bg-black px-3">
       <button
-        onClick={() => router.push("/profile")}
+        onClick={() => router.back()}
         className="rounded-xl bg-[#241A13] px-4 py-2 text-sm font-black text-white transition hover:bg-[#322217]"
       >
-        Retour au profil
+        Retour
       </button>
 
       <div className="text-xs font-black uppercase text-slate-400">
@@ -203,7 +203,7 @@ function countFigure(playerKey: string, rowId: YamRow) {
       fitToScreen={false}
       setFitToScreen={() => {}}
       toggleFullscreen={() => {}}
-      quitGame={() => router.push("/profile")}
+      quitGame={() => router.back()}
       useSideLeaderboard={players.length <= 3}
       viewportRef={viewportRef}
       sheetRef={sheetRef}

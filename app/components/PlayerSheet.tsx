@@ -3,7 +3,16 @@
 import { Pencil } from "lucide-react";
 import { columns, rows, YamRow } from "../lib/yamRules";
 import React from "react";
-import type { TournamentThemeConfig } from "../lib/tournamentThemes";
+import {
+  getTournamentTheme,
+} from "../lib/tournamentThemes";
+
+import {
+  getGrandPrixCircuitTheme,
+} from "../lib/grandPrixThemes";
+import type {
+  TournamentThemeConfig,
+} from "../lib/tournamentThemes";
 type ScoreValue = number | "X" | null;
 
 type Player = {
@@ -43,6 +52,7 @@ export default function PlayerSheet({
   gameFinished,
   lastScoreAnimation,
   tournamentTheme,
+  grandPrixCircuitId,
   color,
 }: {
   player: Player;
@@ -52,6 +62,7 @@ export default function PlayerSheet({
   getBottomTotal: (playerId: string, columnId: string) => number;
   getGrandTotal: (playerId: string, columnId: string) => number;
   getPlayerTotal: (playerId: string) => number;
+  grandPrixCircuitId?: string | null;
   currentPlayerId: string | null;
   tournamentTheme?: TournamentThemeConfig | null;
   color: {
@@ -83,17 +94,34 @@ export default function PlayerSheet({
   
   const isCurrentPlayer =
   player.id === currentPlayerId;
-  
+  const grandPrixTheme =
+  getGrandPrixCircuitTheme(grandPrixCircuitId);
+
+const activeTheme =
+  grandPrixTheme ?? tournamentTheme;
+  const activeScoreColor =
+  activeTheme?.sheet?.scoreText ?? null;
+
+const activeTurnColor =
+  activeTheme?.sheet?.activeText ?? null;
   
   return (
     <div
-    className={[
-      "shrink-0 rounded-xl border-2 p-4 shadow-2xl transition-colors",
-      tournamentTheme
-      ? `${tournamentTheme.border} bg-gradient-to-br from-[#F7EFE6] to-[#F1E2D4]`
-      : "border-[#CFAF95] bg-gradient-to-br from-[#F7EFE6] to-[#F1E2D4]",
-    ].join(" ")}
-    >
+  className={[
+    "shrink-0 rounded-xl border-2 p-4 shadow-2xl transition-colors",
+    !activeTheme?.sheet
+      ? activeTheme?.border ?? "border-[#CFAF95]"
+      : "",
+  ].join(" ")}
+  style={{
+    background:
+      activeTheme?.sheet?.cardBackground ??
+      "linear-gradient(135deg, #F7EFE6 0%, #F1E2D4 100%)",
+
+    borderColor:
+      activeTheme?.sheet?.cardBorder,
+  }}
+>
     <div className="relative  text-center">
     
     {editingPlayerId === player.id ? (
@@ -141,22 +169,34 @@ export default function PlayerSheet({
     )}
     
     <div
-    className={[
-      "text-3xl font-black",
-      tournamentTheme
-      ? tournamentTheme.accentDarkText
-      : "text-[#B84332]",
-    ].join(" ")}
-    >
-    {getPlayerTotal(player.id)}
-    </div>
-    {lastScoreAnimation?.playerId === player.id && (
-      <div className={[
-        "pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black animate-score-pop",
-        tournamentTheme
-        ? tournamentTheme.accentDarkText
+  className={[
+    "text-3xl font-black",
+    activeScoreColor
+      ? ""
+      : activeTheme
+        ? activeTheme.accentDarkText
         : "text-[#B84332]",
-      ].join(" ")}>
+  ].join(" ")}
+  style={{
+    color: activeScoreColor ?? undefined,
+  }}
+>
+  {getPlayerTotal(player.id)}
+</div>
+    {lastScoreAnimation?.playerId === player.id && (
+     <div
+  className={[
+    "pointer-events-none absolute left-1/2 top-12 -translate-x-1/2 text-lg font-black animate-score-pop",
+    activeScoreColor
+      ? ""
+      : activeTheme
+        ? activeTheme.accentDarkText
+        : "text-[#B84332]",
+  ].join(" ")}
+  style={{
+    color: activeScoreColor ?? undefined,
+  }}
+>
       {lastScoreAnimation.value === "X"
         ? "✕"
         : `+${lastScoreAnimation.value}`}
@@ -165,15 +205,20 @@ export default function PlayerSheet({
       <div className="h-5 mt-0">
       {isCurrentPlayer && !gameFinished && (
         <div
-        className={[
-          "text-xs font-black uppercase tracking-wider animate-pulse",
-          tournamentTheme
-          ? tournamentTheme.accentDarkText
-          : "text-[#B84332]",
-        ].join(" ")}
-        >
-        ▶ Ton tour
-        </div>
+  className={[
+    "text-xs font-black uppercase tracking-wider animate-pulse",
+    activeTurnColor
+      ? ""
+      : activeTheme
+        ? activeTheme.accentDarkText
+        : "text-[#B84332]",
+  ].join(" ")}
+  style={{
+    color: activeTurnColor ?? undefined,
+  }}
+>
+  ▶ Ton tour
+</div>
       )}
       </div>
       </div>
@@ -189,24 +234,26 @@ export default function PlayerSheet({
       isCellPlayable={isCellPlayable}
       onSelectCell={onSelectCell}
       lastScoreAnimation={lastScoreAnimation}
-      tournamentTheme={tournamentTheme}
+      tournamentTheme={activeTheme}
+      grandPrixCircuitId={grandPrixCircuitId}
       />
       </div>
     );
   }
   function ScoreGrid({
-    player,
-    activeColumns,
-    getScore,
-    getTopTotal,
-    getBonus,
-    getBottomTotal,
-    getGrandTotal,
-    isCellPlayable,
-    onSelectCell,
-    lastScoreAnimation,
-    tournamentTheme,
-  }: {
+  player,
+  activeColumns,
+  getScore,
+  getTopTotal,
+  getBonus,
+  getBottomTotal,
+  getGrandTotal,
+  isCellPlayable,
+  onSelectCell,
+  lastScoreAnimation,
+  tournamentTheme,
+  grandPrixCircuitId,
+}: {
     player: Player;
     activeColumns: typeof columns;
     getScore: (playerId: string, columnId: string, rowId: YamRow) => ScoreValue;
@@ -215,6 +262,7 @@ export default function PlayerSheet({
     getBottomTotal: (playerId: string, columnId: string) => number;
     getGrandTotal: (playerId: string, columnId: string) => number;
     isCellPlayable: (playerId: string, columnId: string, rowId: YamRow) => boolean;
+    grandPrixCircuitId?: string | null;
     onSelectCell: (cell: SelectedCell) => void;
     lastScoreAnimation: {
       playerId: string;
@@ -228,45 +276,51 @@ export default function PlayerSheet({
     activeColumns.length === 6
     ? "grid-cols-[56px_40px_40px_6px_40px_40px_6px_40px_40px]"
     : "grid-cols-[56px_40px_6px_40px_6px_40px]";
-    const sheetTheme = {
+    
+    const tournamentSheetTheme = {
   australian_open: {
-  totalBackground: "bg-[#E8D8C5]",
-    totalText: "text-[#155A87]",
-    finalBackground: "bg-[#1779BA]",
-    diceBorder: "border-[#1779BA]",
-    diceDot: "bg-[#1779BA]",
+  totalBackground: "#E8D8C5",
+    totalText: "#155A87",
+    finalBackground: "#1779BA",
+    finalText: "#FFFFFF",
+    diceBorder: "#1779BA",
+    diceDot: "#1779BA",
   },
 
   roland_garros: {
-  totalBackground: "bg-[#E8D8C5]",
-    totalText: "text-[#8F3F25]",
-    finalBackground: "bg-[#B85632]",
-    diceBorder: "border-[#B85632]",
-    diceDot: "bg-[#B85632]",
+  totalBackground: "#E8D8C5",
+    totalText: "#8F3F25",
+    finalBackground: "#B85632",
+    diceBorder: "#B85632",
+    finalText: "#FFFFFF",
+    diceDot: "#B85632",
   },
 
   wimbledon: {
-  totalBackground: "bg-[#E8D8C5]",
-    totalText: "text-[#315B40]",
-    finalBackground: "bg-[#315B40]",
-    diceBorder: "border-[#315B40]",
-    diceDot: "bg-[#315B40]",
+  totalBackground: "#E8D8C5",
+    totalText: "#315B40",
+    finalBackground: "#315B40",
+    diceBorder: "#315B40",
+    finalText: "#FFFFFF",
+    diceDot: "#315B40",
   },
 
   us_open: {
-  totalBackground: "bg-[#E8D8C5]",
-    totalText: "text-[#183B73]",
-    finalBackground: "bg-[#183B73]",
-    diceBorder: "border-[#183B73]",
-    diceDot: "bg-[#183B73]",
+  totalBackground: "#E8D8C5",
+    totalText: "#183B73",
+    finalBackground: "#183B73",
+    diceBorder: "#183B73",
+    finalText: "#FFFFFF",
+    diceDot: "#183B73",
   },
 
   world_cup: {
-    totalBackground: "bg-[#E8D8C5]",
-    totalText: "text-[#102E20]",
-    finalBackground: "bg-[#073D22]",
-    diceBorder: "border-[#103B28]",
-    diceDot: "bg-[#103B28]",
+    totalBackground: "#E8D8C5",
+    totalText: "#102E20",
+    finalBackground: "#073D22",
+    finalText: "#FFFFFF",
+    diceBorder: "#103B28",
+    diceDot: "#103B28",
   },
 }[
   tournamentTheme?.id as
@@ -276,6 +330,9 @@ export default function PlayerSheet({
     | "us_open"
     | "world_cup"
 ] ?? null;
+
+const sheetTheme =
+  tournamentTheme?.sheet ?? tournamentSheetTheme;
     const themedColors = tournamentTheme
   ? {
       darkText: tournamentTheme.accentDarkText,
@@ -365,15 +422,27 @@ export default function PlayerSheet({
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+cellClassName={
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+labelStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
-      cellClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+    : undefined
+}
+cellStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
+    : undefined
+}
       />
       
       <TotalGridRow
@@ -382,15 +451,27 @@ export default function PlayerSheet({
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+cellClassName={
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+labelStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
-      cellClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+    : undefined
+}
+cellStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
+    : undefined
+}
       />
       
       <TotalGridRow
@@ -401,15 +482,27 @@ export default function PlayerSheet({
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+cellClassName={
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+labelStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
-      cellClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+    : undefined
+}
+cellStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
+    : undefined
+}
       />
       </div>
       </div>
@@ -459,15 +552,27 @@ export default function PlayerSheet({
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+cellClassName={
+  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+}
+labelStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
-      cellClassName={
-        sheetTheme
-  ? `${sheetTheme.totalBackground} ${sheetTheme.totalText}`
-  : "bg-[#EABF9F] text-[#241812]"
+    : undefined
+}
+cellStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.totalBackground,
+        color: sheetTheme.totalText,
       }
+    : undefined
+}
       isFirstRow
       />
       
@@ -477,15 +582,27 @@ export default function PlayerSheet({
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-        sheetTheme
-  ? `${sheetTheme.finalBackground} text-white`
-  : "bg-[#B93A2E] text-white"
+  sheetTheme ? undefined : "bg-[#B93A2E] text-white"
+}
+cellClassName={
+  sheetTheme ? undefined : "bg-[#B93A2E] text-white"
+}
+labelStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.finalBackground,
+        color: sheetTheme.finalText,
       }
-      cellClassName={
-       sheetTheme
-  ? `${sheetTheme.finalBackground} text-white`
-  : "bg-[#B93A2E] text-white"
+    : undefined
+}
+cellStyle={
+  sheetTheme
+    ? {
+        backgroundColor: sheetTheme.finalBackground,
+        color: sheetTheme.finalText,
       }
+    : undefined
+}
       />
       </div>
       </div>
@@ -598,24 +715,30 @@ export default function PlayerSheet({
   }
   
   function TotalGridRow({
-    label,
-    cells,
-    activeColumns,
-    labelClassName,
-    cellClassName,
-    isFirstRow = false,
-  }: {
+  label,
+  cells,
+  activeColumns,
+  labelClassName,
+  cellClassName,
+  labelStyle,
+  cellStyle,
+  isFirstRow = false,
+}: {
     label: string;
     cells: number[];
     activeColumns: typeof columns;
     gridColumns: string;
-    labelClassName: string;
-    cellClassName: string;
+    labelClassName?: string;
+cellClassName?: string;
+
+labelStyle?: React.CSSProperties;
+cellStyle?: React.CSSProperties;
     isFirstRow?: boolean;
   }) {
     return (
       <>
       <div
+      style={labelStyle}
       className={[
         "flex h-7 items-center justify-center text-xs font-black",
         CELL_BORDER,
@@ -639,6 +762,7 @@ export default function PlayerSheet({
         
         items.push(
           <div
+          style={cellStyle}
           key={`cell-${index}`}
           className={[
             "flex h-7 items-center justify-center text-sm font-black",
@@ -731,11 +855,12 @@ export default function PlayerSheet({
     return (
      <div
   className={[
-    "grid h-5 w-5 grid-cols-3 grid-rows-3 rounded border-2 bg-[#FFF9F2] p-[2px]",
-    sheetTheme
-      ? sheetTheme.diceBorder
-      : "border-[#B84332]",
-  ].join(" ")}
+  "grid h-5 w-5 grid-cols-3 grid-rows-3 rounded border-2 bg-[#FFF9F2] p-[2px]",
+  sheetTheme ? "" : "border-[#B84332]",
+].join(" ")}
+style={{
+  borderColor: sheetTheme?.diceBorder,
+}}
 >
       {Array.from({ length: 9 }).map((_, i) => {
         const row = Math.floor(i / 3) + 1;
@@ -753,11 +878,12 @@ export default function PlayerSheet({
           {active && (
             <div
   className={[
-    "h-[3px] w-[3px] rounded-full",
-    sheetTheme
-      ? sheetTheme.diceDot
-      : "bg-[#B84332]",
-  ].join(" ")}
+  "h-[3px] w-[3px] rounded-full",
+  sheetTheme ? "" : "bg-[#B84332]",
+].join(" ")}
+style={{
+  backgroundColor: sheetTheme?.diceDot,
+}}
 />
           )}
           </div>

@@ -12,6 +12,9 @@ import { getLevelFromTotalXp } from "./lib/levelRules";
 import { ChevronRight } from "lucide-react";
 import { getTournamentTheme } from "./lib/tournamentThemes";
 import type { TournamentThemeConfig } from "./lib/tournamentThemes";
+import { rebuildProfileStats } from "./lib/rebuildProfileStats";
+import { syncProfileAchievements } from "./lib/syncProfileAchievements";
+import { getGrandPrixCircuitTheme } from "./lib/grandPrixThemes";
 import {
   achievementDefinitions,
   BADGE_XP,
@@ -29,22 +32,33 @@ import LoadingScreen from "./components/LoadingScreen";
 type ScoreValue = number | "X" | null;
 type CompetitionLocalSet = {
   competitionId: string;
-  competitionType: "grand_slam_final" | "world_cup";
+
+  competitionType:
+    | "grand_slam_final"
+    | "world_cup"
+    | "grand_prix";
+
   matchId: string | null;
+
+  grandPrixId: string | null;
+  circuitId: string | null;
+
   matchNumber: number;
   gameId: string;
   roundNumber: number;
+
   isWorldCupSemiFinal: boolean;
   isWorldCupFinal: boolean;
+
   theme:
-  | "australian_open"
-  | "roland_garros"
-  | "wimbledon"
-  | "us_open"
-  | "world_cup";
-  
+    | "australian_open"
+    | "roland_garros"
+    | "wimbledon"
+    | "us_open"
+    | "world_cup";
+
   tournamentName: string;
-  
+
   player1SetsWon: number;
   player2SetsWon: number;
 };
@@ -62,39 +76,9 @@ type SelectedCell = {
   columnId: string;
   rowId: YamRow;
 };
+const GRAND_PRIX_POINTS = [25, 18, 15, 12, 10, 8];
 const STORAGE_KEY = "yam-score-save";
-const PLAYER_COLORS = [
-  {
-    text: "text-cyan-300",
-    border: "border-cyan-500",
-    bg: "bg-cyan-500/10",
-  },
-  {
-    text: "text-emerald-300",
-    border: "border-emerald-500",
-    bg: "bg-emerald-500/10",
-  },
-  {
-    text: "text-amber-300",
-    border: "border-amber-500",
-    bg: "bg-amber-500/10",
-  },
-  {
-    text: "text-fuchsia-300",
-    border: "border-fuchsia-500",
-    bg: "bg-fuchsia-500/10",
-  },
-  {
-    text: "text-orange-300",
-    border: "border-orange-500",
-    bg: "bg-orange-500/10",
-  },
-  {
-    text: "text-violet-300",
-    border: "border-violet-500",
-    bg: "bg-violet-500/10",
-  },
-];
+
 type HomeStats = {
   gamesPlayed: number;
   winRate: number;
@@ -126,6 +110,8 @@ export default function Home() {
   const [homeStats, setHomeStats] = useState<HomeStats | null>(null);
   const [isLoadingCompetitionSet, setIsLoadingCompetitionSet] =
   useState(false);
+  const [grandPrixPointsByPlayer, setGrandPrixPointsByPlayer] =
+  useState<Record<string, number>>({});
   const router = useRouter();
   const [playerCount, setPlayerCount] = useState(2);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -237,9 +223,12 @@ useEffect(() => {
         error: authError,
       } = await supabase.auth.getUser();
 
-      if (authError) {
-        throw authError;
-      }
+      if (
+  authError &&
+  authError.name !== "AuthSessionMissingError"
+) {
+  throw authError;
+}
 
       if (!user) {
         setCurrentUserId(null);
@@ -392,7 +381,7 @@ useEffect(() => {
       
       const competitionId = searchParams.get("competitionId");
       const gameId = searchParams.get("gameId");
-      
+     const grandPrixId = searchParams.get("grandPrixId"); 
       if (!competitionId || !gameId) return;
       
       setIsLoadingCompetitionSet(true);
@@ -440,12 +429,27 @@ useEffect(() => {
       .eq("game_id", gameId)
       .order("player_order", { ascending: true });
       
-      if (playersError || !gamePlayers || gamePlayers.length !== 2) {
-        console.error("Erreur chargement joueurs du set", playersError);
-        alert("Impossible de charger les joueurs de ce set.");
-        setIsLoadingCompetitionSet(false);
-        return;
-      }
+      if (
+  playersError ||
+  !gamePlayers ||
+  gamePlayers.length !== game.player_count
+) {
+  console.error("Erreur chargement joueurs de la partie de compétition", {
+    error: playersError,
+    expectedPlayerCount: game.player_count,
+    loadedPlayerCount: gamePlayers?.length ?? 0,
+    gameId,
+    competitionId,
+  });
+
+  alert(
+    `Impossible de charger les joueurs de cette partie ` +
+      `(${gamePlayers?.length ?? 0}/${game.player_count}).`
+  );
+
+  setIsLoadingCompetitionSet(false);
+  return;
+}
       const { data: competition, error: competitionError } =
       await supabase
       .from("competitions")
@@ -465,7 +469,42 @@ useEffect(() => {
         setIsLoadingCompetitionSet(false);
         return;
       }
-      
+      let circuitId: string | null = null;
+
+if (competition.competition_type === "grand_prix") {
+  if (!grandPrixId) {
+    console.error("grandPrixId manquant dans l’URL");
+
+    alert("Impossible de retrouver le Grand Prix.");
+
+    setIsLoadingCompetitionSet(false);
+    return;
+  }
+
+  const {
+    data: grandPrix,
+    error: grandPrixError,
+  } = await supabase
+    .from("competition_grand_prix")
+    .select("circuit_id")
+    .eq("id", grandPrixId)
+    .eq("competition_id", competitionId)
+    .maybeSingle();
+
+  if (grandPrixError || !grandPrix) {
+    console.error(
+      "Erreur chargement du circuit Grand Prix",
+      grandPrixError
+    );
+
+    alert("Impossible de charger le circuit du Grand Prix.");
+
+    setIsLoadingCompetitionSet(false);
+    return;
+  }
+
+  circuitId = grandPrix.circuit_id;
+}
       const competitionPlayerIds = gamePlayers
       .map((player) => player.competition_player_id)
       .filter(
@@ -477,31 +516,107 @@ useEffect(() => {
         error: competitionPlayersError,
       } = await supabase
       .from("competition_players")
-      .select("id, player_order, sets_won")
+      .select(`
+  id,
+  player_order,
+  player_key,
+  player_name,
+  profile_id,
+  avatar_url,
+  sets_won
+`)
       .eq("competition_id", competitionId)
       .in("id", competitionPlayerIds);
       
       if (
-        competitionPlayersError ||
-        !competitionPlayers ||
-        competitionPlayers.length !== 2
-      ) {
+  competitionPlayersError ||
+  !competitionPlayers ||
+  competitionPlayers.length !== game.player_count
+) {
+  console.error(
+    "Erreur chargement des participants de la compétition",
+    {
+      error: competitionPlayersError,
+      competitionPlayerIds,
+      expectedPlayerCount: game.player_count,
+      loadedPlayerCount: competitionPlayers?.length ?? 0,
+      competitionType: competition.competition_type,
+    }
+  );
+
+  alert(
+    `Impossible de charger les participants de la compétition ` +
+      `(${competitionPlayers?.length ?? 0}/${game.player_count}).`
+  );
+
+  setIsLoadingCompetitionSet(false);
+  return;
+}
+if (competition.competition_type === "grand_prix") {
+  const { data: finishedGrandPrix, error: finishedGrandPrixError } =
+    await supabase
+      .from("competition_grand_prix")
+      .select("id")
+      .eq("competition_id", competitionId)
+      .eq("status", "finished");
+
+  if (finishedGrandPrixError) {
+    console.error(
+      "Erreur chargement des Grand Prix terminés :",
+      finishedGrandPrixError
+    );
+  } else {
+    const finishedGrandPrixIds = (finishedGrandPrix ?? []).map(
+      (grandPrix) => grandPrix.id
+    );
+
+    if (finishedGrandPrixIds.length === 0) {
+      setGrandPrixPointsByPlayer({});
+    } else {
+      const {
+        data: previousResults,
+        error: previousResultsError,
+      } = await supabase
+        .from("competition_grand_prix_results")
+        .select("competition_player_id, points_awarded")
+        .in("grand_prix_id", finishedGrandPrixIds);
+
+      if (previousResultsError) {
         console.error(
-          "Erreur chargement joueurs de la rencontre",
-          {
-            error: competitionPlayersError,
-            competitionPlayerIds,
-            competitionType: competition.competition_type,
-          }
+          "Erreur chargement des points championnat :",
+          previousResultsError
         );
-        
-        alert(
-          "Impossible de charger les joueurs de cette rencontre."
-        );
-        
-        setIsLoadingCompetitionSet(false);
-        return;
+      } else {
+        const playerKeyByCompetitionPlayerId =
+          new Map(
+            competitionPlayers.map((player) => [
+              player.id,
+              player.player_key,
+            ])
+          );
+
+        const pointsByPlayerKey: Record<string, number> = {};
+
+        for (const result of previousResults ?? []) {
+          const playerKey =
+            playerKeyByCompetitionPlayerId.get(
+              result.competition_player_id
+            );
+
+          if (!playerKey) continue;
+
+          pointsByPlayerKey[playerKey] =
+            (pointsByPlayerKey[playerKey] ?? 0) +
+            result.points_awarded;
+        }
+
+        setGrandPrixPointsByPlayer(pointsByPlayerKey);
       }
+    }
+  }
+} else {
+  setGrandPrixPointsByPlayer({});
+}
       const { data: savedScores, error: scoresError } = await supabase
       .from("local_game_scores")
       .select("player_key, column_id, row_id, value")
@@ -619,12 +734,17 @@ useEffect(() => {
         
         competitionType:
         competition.competition_type as
-        | "grand_slam_final"
-        | "world_cup",
+  | "grand_slam_final"
+  | "world_cup"
+  | "grand_prix",
         
         matchId,
-        isWorldCupSemiFinal,
-        isWorldCupFinal,
+
+grandPrixId,
+circuitId,
+
+isWorldCupSemiFinal,
+isWorldCupFinal,
         matchNumber: worldCupMatchNumber,
         
         gameId,
@@ -637,9 +757,11 @@ useEffect(() => {
         theme: competition.theme,
         
         tournamentName:
-        competition.competition_type === "world_cup"
-        ? "Coupe du Monde"
-        : getTournamentName(competition.theme),
+  competition.competition_type === "world_cup"
+    ? "Coupe du Monde"
+    : competition.competition_type === "grand_prix"
+      ? "Saison Grand Prix"
+      : getTournamentName(competition.theme),
         
         player1SetsWon:
         competition.competition_type === "grand_slam_final"
@@ -653,8 +775,13 @@ useEffect(() => {
       });
       setCurrentLocalGameId(gameId);
       setPartyMode("local");
-      setPlayerCount(2);
-      setGameMode(game.mode);
+      setPlayerCount(game.player_count);
+
+setGameMode(
+  game.mode === "6" || game.mode === "6cols"
+    ? "6cols"
+    : "3cols"
+);
       setPlayers(loadedPlayers);
       setScores(loadedScores);
       setFinishedGameSaved(false);
@@ -1315,11 +1442,27 @@ function confirmQuitGame() {
     setFitScale(1);
     setHasSavedGame(false);
     
-    router.push(
-      competitionLocalSet.competitionType === "world_cup"
-      ? `/modes-speciaux/coupe-du-monde/${competitionId}`
-      : `/modes-speciaux/grand-chelem/${competitionId}`
-    );
+    let competitionRoute: string;
+
+switch (competitionLocalSet.competitionType) {
+  case "world_cup":
+    competitionRoute =
+      `/modes-speciaux/coupe-du-monde/${competitionId}`;
+    break;
+
+  case "grand_prix":
+    competitionRoute =
+      `/modes-speciaux/grand-prix/${competitionId}`;
+    break;
+
+  case "grand_slam_final":
+  default:
+    competitionRoute =
+      `/modes-speciaux/grand-chelem/${competitionId}`;
+    break;
+}
+
+router.push(competitionRoute);
     
     return;
   }
@@ -1713,31 +1856,57 @@ function getLeaderboard() {
     ...player,
     total: getPlayerTotal(player.id),
   }));
-  
+
   const sorted = [...totals].sort((a, b) => b.total - a.total);
   const leaderTotal = sorted[0]?.total ?? 0;
-  
-  return sorted.map((player, index) => ({
-    ...player,
-    rank: index + 1,
-    gap: leaderTotal - player.total,
-    remainingMoves: getRemainingMoves(player.id),
-    straights: countFigure(player.id, "straight"),
-    fourOfAKinds: countFigure(player.id, "fourOfAKind"),
-    yams: countFigure(player.id, "yam"),
-  }));
+
+  return sorted.map((player, index) => {
+    const rank = index + 1;
+
+    const provisionalGrandPrixPoints =
+      competitionLocalSet?.competitionType === "grand_prix"
+        ? GRAND_PRIX_POINTS[index] ?? 0
+        : 0;
+
+    const championshipPoints =
+      competitionLocalSet?.competitionType === "grand_prix"
+        ? (grandPrixPointsByPlayer[player.id] ?? 0) +
+          provisionalGrandPrixPoints
+        : null;
+
+    return {
+      ...player,
+      rank,
+      gap: leaderTotal - player.total,
+      remainingMoves: getRemainingMoves(player.id),
+      straights: countFigure(player.id, "straight"),
+      fourOfAKinds: countFigure(player.id, "fourOfAKind"),
+      yams: countFigure(player.id, "yam"),
+      championshipPoints,
+      provisionalGrandPrixPoints,
+    };
+  });
 }
 const currentPlayerId = getCurrentPlayerId();
 const gameFinished = isGameFinished();
-const tournamentTheme = competitionLocalSet
-? getTournamentTheme(competitionLocalSet.theme)
-: null;
+const tournamentTheme =
+  competitionLocalSet
+    ? competitionLocalSet.competitionType === "grand_prix"
+      ? getGrandPrixCircuitTheme(
+          competitionLocalSet.circuitId!
+        )
+      : getTournamentTheme(
+          competitionLocalSet.theme
+        )
+    : null;
 const quitLabel =
-competitionLocalSet?.competitionType === "world_cup"
-? "Quitter le match"
-: competitionLocalSet?.competitionType === "grand_slam_final"
-? "Quitter le set"
-: "Quitter la partie";
+  competitionLocalSet?.competitionType === "world_cup"
+    ? "Quitter le match"
+    : competitionLocalSet?.competitionType === "grand_slam_final"
+      ? "Quitter le set"
+      : competitionLocalSet?.competitionType === "grand_prix"
+        ? "Quitter le Grand Prix"
+        : "Quitter la partie";
 const [finishedGameSaved, setFinishedGameSaved] = useState(false);
 useEffect(() => {
   async function updateProfileStatsAfterGame({
@@ -2217,32 +2386,41 @@ if (competitionLocalSet) {
   .eq("id", competitionLocalSet.competitionId)
   .single();
   
-  const rpcName =
-  competitionData?.competition_type === "world_cup"
-  ? "finish_world_cup_match"
-  : "finish_competition_set";
-  
-  const rpcParams =
-  competitionData?.competition_type === "world_cup"
-  ? {
+  let rpcName: string;
+let rpcParams: any;
+
+if (competitionData?.competition_type === "world_cup") {
+  rpcName = "finish_world_cup_match";
+
+  rpcParams = {
     p_competition_id: competitionLocalSet.competitionId,
     p_match_id: matchId,
     p_game_id: createdGameId,
     p_play_mode: "local",
-  }
-  : {
+  };
+} else if (competitionData?.competition_type === "grand_prix") {
+  rpcName = "finish_grand_prix";
+
+  rpcParams = {
+    p_competition_id: competitionLocalSet.competitionId,
+    p_grand_prix_id: new URLSearchParams(window.location.search).get("grandPrixId"),
+    p_game_id: createdGameId,
+    p_play_mode: "local",
+  };
+} else {
+  rpcName = "finish_competition_set";
+
+  rpcParams = {
     p_competition_id: competitionLocalSet.competitionId,
     p_game_id: createdGameId,
     p_play_mode: "local",
   };
-  
-  const {
-    data: competitionResult,
-    error: competitionError,
-  } = await supabase.rpc(
-    rpcName,
-    rpcParams
-  );
+}
+
+const {
+  data: competitionResult,
+  error: competitionError,
+} = await supabase.rpc(rpcName, rpcParams);
   
   if (competitionError) {
     console.error(
@@ -2259,6 +2437,20 @@ if (competitionLocalSet) {
       competition_finished: boolean;
     }
   );
+if (
+  competitionData?.competition_type === "grand_prix" &&
+  currentUserId
+) {
+  await rebuildProfileStats(currentUserId);
+
+  const grandPrixAchievementResult =
+    await syncProfileAchievements(currentUserId);
+
+  console.log(
+    "Succès Grand Prix Local synchronisés",
+    grandPrixAchievementResult
+  );
+}
 }
 console.log("✅ Partie locale complètement sauvegardée");
 
@@ -2306,6 +2498,15 @@ async function checkSupabaseConnection() {
     setIsCheckingConnection(false);
   }
 }
+const activeTournamentTheme = competitionLocalSet
+  ? competitionLocalSet.competitionType === "grand_prix"
+    ? getGrandPrixCircuitTheme(
+        competitionLocalSet.circuitId
+      )
+    : getTournamentTheme(
+        competitionLocalSet.theme
+      )
+  : null;
 return (
   <main
   className={
@@ -2379,78 +2580,118 @@ return (
     useSideLeaderboard={useSideLeaderboard}
     viewportRef={viewportRef}
     sheetRef={sheetRef}
+    
     fitOffsetX={fitOffsetX}
     quitLabel={
-      competitionLocalSet
-      ? competitionLocalSet.competitionType === "world_cup"
+  competitionLocalSet
+    ? competitionLocalSet.competitionType === "world_cup"
       ? "Quitter le match"
-      : "Quitter le set"
-      : "Quitter"
-    }
+      : competitionLocalSet.competitionType === "grand_prix"
+        ? "Quitter le Grand Prix"
+        : "Quitter le set"
+    : "Quitter"
+}
     devFillRandomGame={fillRandomGame}
     competitionHeader={
-      competitionLocalSet
-      ? competitionLocalSet.competitionType === "grand_slam_final"
+  !competitionLocalSet
+    ? null
+    : competitionLocalSet.competitionType === "grand_slam_final"
       ? {
-        competitionId:
-        competitionLocalSet.competitionId,
-        
-        competitionType:
-        "grand_slam_final",
-        
-        roundNumber:
-        competitionLocalSet.roundNumber,
-        
-        roundLabel:
-        `Finale · Set ${competitionLocalSet.roundNumber}`,
-        
-        theme:
-        competitionLocalSet.theme,
-        
-        tournamentName:
-        competitionLocalSet.tournamentName,
-        
-        player1SetsWon:
-        competitionLocalSet.player1SetsWon,
-        
-        player2SetsWon:
-        competitionLocalSet.player2SetsWon,
-      }
-      : {
-        competitionId:
-        competitionLocalSet.competitionId,
-        
-        competitionType:
-        "world_cup",
-        
-        roundNumber:
-        competitionLocalSet.roundNumber,
-        
-        roundLabel:
-        getWorldCupRoundLabel(
-          competitionLocalSet.roundNumber,
-          competitionLocalSet.matchNumber
-        ),
-        
-        theme: "world_cup",
-        
-        tournamentName: "Coupe du Monde",
-        
-        matchId:
-        competitionLocalSet.matchId,
-      }
-      : null
-    }
+          competitionId:
+            competitionLocalSet.competitionId,
+
+          competitionType: "grand_slam_final",
+
+          roundNumber:
+            competitionLocalSet.roundNumber,
+
+          roundLabel:
+            `Finale · Set ${competitionLocalSet.roundNumber}`,
+
+          theme:
+            competitionLocalSet.theme,
+
+          tournamentName:
+            competitionLocalSet.tournamentName,
+
+          player1SetsWon:
+            competitionLocalSet.player1SetsWon,
+
+          player2SetsWon:
+            competitionLocalSet.player2SetsWon,
+        }
+      : competitionLocalSet.competitionType === "world_cup"
+        ? {
+            competitionId:
+              competitionLocalSet.competitionId,
+
+            competitionType: "world_cup",
+
+            roundNumber:
+              competitionLocalSet.roundNumber,
+
+            roundLabel:
+              getWorldCupRoundLabel(
+                competitionLocalSet.roundNumber,
+                competitionLocalSet.matchNumber
+              ),
+
+            theme: "world_cup",
+
+            tournamentName: "Coupe du Monde",
+
+            matchId:
+              competitionLocalSet.matchId,
+          }
+        : {
+            competitionId:
+              competitionLocalSet.competitionId,
+
+            competitionType: "grand_prix",
+
+            roundNumber:
+              competitionLocalSet.roundNumber,
+
+            roundLabel:
+              `Manche ${competitionLocalSet.roundNumber}`,
+
+            theme:
+              competitionLocalSet.theme,
+
+            tournamentName:
+              competitionLocalSet.tournamentName,
+
+            circuitId:
+              competitionLocalSet.circuitId,
+          }
+}
     onBackToCompetition={
-      competitionLocalSet
-      ? () =>
-        router.push(
-        competitionLocalSet.competitionType === "world_cup"
-        ? `/modes-speciaux/coupe-du-monde/${competitionLocalSet.competitionId}`
-        : `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}`
-      )
-      : undefined
-    }
+  competitionLocalSet
+    ? () => {
+        let competitionRoute: string;
+
+        switch (competitionLocalSet.competitionType) {
+          case "world_cup":
+            competitionRoute =
+              `/modes-speciaux/coupe-du-monde/${competitionLocalSet.competitionId}`;
+            break;
+
+          case "grand_prix":
+            competitionRoute =
+              `/modes-speciaux/grand-prix/${competitionLocalSet.competitionId}`;
+            break;
+
+          case "grand_slam_final":
+          default:
+            competitionRoute =
+              `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}`;
+            break;
+        }
+
+        router.push(competitionRoute);
+      }
+    : undefined
+}
     fitScale={fitScale}
     players={players}
     PlayerSheetComponent={PlayerSheet}
@@ -2536,11 +2777,7 @@ return (
     isSavingScore={isSavingScore}
     isOnline={isOnline}
     requiresOnlineSave={Boolean(currentLocalGameId)}
-    tournamentTheme={
-      competitionLocalSet
-        ? getTournamentTheme(competitionLocalSet.theme)
-        : null
-    }
+    tournamentTheme={activeTournamentTheme}
   />
 )}
   {showVictoryModal && gameFinished && (
@@ -2549,36 +2786,54 @@ return (
     onViewGrid={() => setShowVictoryModal(false)}
     xpResults={xpResultsByPlayer}
     isFinalizing={!finishedGameSaved}
-    tournamentTheme={
-      competitionLocalSet
-      ? getTournamentTheme(
-        competitionLocalSet.theme as
-        | "australian_open"
-        | "roland_garros"
-        | "wimbledon"
-        | "us_open"
-        | "world_cup"
-      )
-      : null
-    }
+    tournamentTheme={activeTournamentTheme}
     onBackHome={
-      competitionLocalSet
-      ? () => {
+  competitionLocalSet
+    ? () => {
         localStorage.removeItem(STORAGE_KEY);
-        
-        const victorySuffix =
-        competitionFinishResult?.competition_finished
-        ? "?tournamentVictory=1"
-        : "";
-        
-        router.push(
-          competitionLocalSet.competitionType === "world_cup"
-          ? `/modes-speciaux/coupe-du-monde/${competitionLocalSet.competitionId}${victorySuffix}`
-          : `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}${victorySuffix}`
-        );
+
+        let competitionRoute: string;
+
+        switch (competitionLocalSet.competitionType) {
+          case "world_cup":
+            competitionRoute =
+              `/modes-speciaux/coupe-du-monde/` +
+              `${competitionLocalSet.competitionId}` +
+              `${
+                competitionFinishResult?.competition_finished
+                  ? "?victory=1"
+                  : ""
+              }`;
+            break;
+
+          case "grand_prix":
+            competitionRoute =
+              `/modes-speciaux/grand-prix/` +
+              `${competitionLocalSet.competitionId}` +
+              `${
+                competitionFinishResult?.competition_finished
+                  ? "?victory=1"
+                  : ""
+              }`;
+            break;
+
+          case "grand_slam_final":
+          default:
+            competitionRoute =
+              `/modes-speciaux/grand-chelem/` +
+              `${competitionLocalSet.competitionId}` +
+              `${
+                competitionFinishResult?.competition_finished
+                  ? "?victory=1"
+                  : ""
+              }`;
+            break;
+        }
+
+        router.push(competitionRoute);
       }
-      : newGameFromVictory
-    }
+    : newGameFromVictory
+}
     competitionType={
       competitionLocalSet?.competitionType ?? null
     }
@@ -2721,22 +2976,25 @@ function QuitModal({
   quitLabel: string;
   tournamentTheme?: TournamentThemeConfig | null;
 }) {
-  const isWorldCup = tournamentTheme?.id === "world_cup";
-  const isGrandSlam =
-  tournamentTheme &&
-  tournamentTheme.id !== "world_cup";
-  
-  const title = isWorldCup
+  const isWorldCup = quitLabel === "Quitter le match";
+const isGrandSlam = quitLabel === "Quitter le set";
+const isGrandPrix = quitLabel === "Quitter le Grand Prix";
+
+const title = isWorldCup
   ? "Quitter le match ?"
   : isGrandSlam
-  ? "Quitter le set ?"
-  : "Quitter la partie ?";
-  
-  const description = isWorldCup
+    ? "Quitter le set ?"
+    : isGrandPrix
+      ? "Quitter le Grand Prix ?"
+      : "Quitter la partie ?";
+
+const description = isWorldCup
   ? "Le match sera sauvegardé et tu reviendras au tableau de la Coupe du Monde."
   : isGrandSlam
-  ? "Le set sera sauvegardé et tu reviendras à la finale."
-  : "La partie sera sauvegardée et tu reviendras au menu principal.";
+    ? "Le set sera sauvegardé et tu reviendras à la finale."
+    : isGrandPrix
+      ? "Le Grand Prix sera sauvegardé et tu reviendras à la saison."
+      : "La partie sera sauvegardée et tu reviendras au menu principal.";
   
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
@@ -2756,16 +3014,30 @@ function QuitModal({
     }
     >
     {tournamentTheme && (
-      <div className="mb-4 flex justify-center">
+  <div className="mb-4 flex justify-center">
+    {tournamentTheme.flagImage ? (
       <Image
-      src={tournamentTheme.headerLogo}
-      alt={tournamentTheme.name}
-      width={72}
-      height={72}
-      className="h-20 w-auto object-contain drop-shadow-xl"
+        src={tournamentTheme.flagImage}
+        alt={`Drapeau — ${tournamentTheme.name}`}
+        width={72}
+        height={48}
+        className="h-12 w-auto rounded object-contain shadow-xl"
       />
+    ) : tournamentTheme.headerLogo ? (
+      <Image
+        src={tournamentTheme.headerLogo}
+        alt={tournamentTheme.name}
+        width={72}
+        height={72}
+        className="h-20 w-auto object-contain drop-shadow-xl"
+      />
+    ) : (
+      <div className="text-5xl">
+        {tournamentTheme.icon}
       </div>
     )}
+  </div>
+)}
     
     {!tournamentTheme && (
       <div className="text-4xl">⚠️</div>
@@ -2807,12 +3079,15 @@ function QuitModal({
     <button
     type="button"
     onClick={onConfirm}
-    className={[
-      "rounded-xl px-4 py-3 font-black transition",
-      tournamentTheme
-      ? `${tournamentTheme.buttonBackground} ${tournamentTheme.buttonHover} ${tournamentTheme.buttonText}`
-      : "bg-[#C44934] text-white hover:bg-[#D75A43]",
-    ].join(" ")}
+    className="rounded-xl border px-4 py-3 font-black text-white transition hover:brightness-110"
+style={
+  tournamentTheme?.sheet
+    ? {
+        backgroundColor: tournamentTheme.sheet.finalBackground,
+        borderColor: tournamentTheme.sheet.finalBackground,
+      }
+    : undefined
+}
     >
     {quitLabel}
     </button>
@@ -3362,7 +3637,19 @@ requiresOnlineSave,
   : "Montée";
   
   const isCompetition = Boolean(tournamentTheme);
-  
+  const sheetTheme = tournamentTheme?.sheet ?? null;
+
+const modalBackground =
+  sheetTheme?.cardBackground ?? null;
+
+const modalBorderColor =
+  sheetTheme?.cardBorder ?? null;
+
+const modalAccentColor =
+  sheetTheme?.activeText ?? null;
+
+const modalTextColor =
+  sheetTheme?.totalText ?? null;
   const competitionButtonClasses = tournamentTheme
   ? `${tournamentTheme.buttonBackground} ${tournamentTheme.buttonHover} ${tournamentTheme.buttonText}`
   : "";
@@ -3423,24 +3710,39 @@ async function handleClearScore() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4">
     <div
-    className={[
-      "rounded-3xl border p-6 shadow-2xl",
-      isPlusMinus ? "w-full max-w-[520px]" : "w-full max-w-sm",
-      
-      isCompetition
+  className={[
+    "overflow-hidden rounded-3xl border p-6 shadow-2xl",
+    isPlusMinus ? "w-full max-w-[520px]" : "w-full max-w-sm",
+
+    isCompetition && !sheetTheme
       ? `${tournamentTheme?.border} bg-[#F4E9DC]`
-      : "border-[#9B6A28]/60 bg-black",
-    ].join(" ")}
-    >
+      : !isCompetition
+        ? "border-[#9B6A28]/60 bg-black"
+        : "",
+  ].join(" ")}
+  style={
+    sheetTheme
+      ? {
+          background: modalBackground ?? undefined,
+          borderColor: modalBorderColor ?? undefined,
+        }
+      : undefined
+  }
+>
     <div className="mb-5 text-center">
     <div
-    className={[
-      "text-xs font-black uppercase tracking-wider",
-      isCompetition
-      ? tournamentTheme?.accentDarkText
-      : "text-[#C44934]",
-    ].join(" ")}
-    >
+  className={[
+    "text-xs font-black uppercase tracking-wider",
+    modalAccentColor
+      ? ""
+      : isCompetition
+        ? tournamentTheme?.accentDarkText
+        : "text-[#C44934]",
+  ].join(" ")}
+  style={{
+    color: modalAccentColor ?? undefined,
+  }}
+>
     {columnLabel}
     </div>
     
@@ -3498,22 +3800,41 @@ async function handleClearScore() {
     );
   }
 }}
-disabled={isSavingScore || (requiresOnlineSave && !isOnline)}
-        className={[
-          "disabled:cursor-not-allowed disabled:opacity-40",
-          "min-h-14 rounded-xl border px-4 py-3 text-xl font-black transition",
-          
-          option === "X"
-          ? isCompetition
-          ? `${competitionButtonClasses} ${tournamentTheme?.border}`
-          : "border-[#C44934] bg-[#C44934] text-white hover:bg-[#D75A43]"
-          : isCompetition
-          ? "border-[#CFAF95] bg-[#FFF8EF] text-[#241812] hover:bg-white"
-          : "border-transparent bg-[#F4E9DC] text-black hover:bg-[#FFF8EF]",
-        ].join(" ")}
-        >
-        {option}
-        </button>
+ disabled={
+    isSavingScore ||
+    (requiresOnlineSave && !isOnline)
+  }
+  className={[
+    "disabled:cursor-not-allowed disabled:opacity-40",
+    "min-h-14 rounded-xl border px-4 py-3 text-xl font-black transition",
+
+    option === "X"
+  ? isCompetition
+    ? sheetTheme
+      ? "border text-white hover:brightness-110"
+      : `${competitionButtonClasses} ${tournamentTheme?.border}`
+    : "border-[#C44934] bg-[#C44934] text-white hover:bg-[#D75A43]"
+      : isCompetition
+        ? sheetTheme
+          ? "border bg-white/70 text-[#241812] hover:bg-white"
+          : "border-[#CFAF95] bg-[#FFF8EF] text-[#241812] hover:bg-white"
+        : "border-transparent bg-[#F4E9DC] text-black hover:bg-[#FFF8EF]",
+  ].join(" ")}
+  style={
+  isCompetition && sheetTheme
+    ? option === "X"
+      ? {
+          backgroundColor: sheetTheme.finalBackground,
+          borderColor: sheetTheme.finalBackground,
+        }
+      : {
+          borderColor: `${sheetTheme.cardBorder}55`,
+        }
+    : undefined
+}
+>
+  {option}
+</button>
       ))}
       </div>
     )}
@@ -3531,11 +3852,20 @@ disabled={isSavingScore || (requiresOnlineSave && !isOnline)}
       setErrorMessage("");
     }}
     className={[
-      "w-full rounded-xl border bg-[#FFF8EF] p-3 text-center text-2xl font-black text-black outline-none",
-      isCompetition
-      ? tournamentTheme?.border
-      : "border-[#9B6A28]/50 focus:border-[#C44934]",
-    ].join(" ")}
+  "w-full rounded-xl border bg-[#FFF8EF] p-3 text-center text-2xl font-black text-black outline-none",
+  isCompetition
+    ? sheetTheme
+      ? ""
+      : tournamentTheme?.border
+    : "border-[#9B6A28]/50 focus:border-[#C44934]",
+].join(" ")}
+style={
+  sheetTheme
+    ? {
+        borderColor: sheetTheme.cardBorder,
+      }
+    : undefined
+}
     placeholder="Score manuel"
     autoFocus
     />
@@ -3554,12 +3884,21 @@ disabled={isSavingScore || (requiresOnlineSave && !isOnline)}
   (requiresOnlineSave && !isOnline)
 }
     className={[
-      "disabled:cursor-not-allowed disabled:opacity-40",
-      "rounded-xl py-3 font-black transition",
-      isCompetition
-      ? competitionButtonClasses
-      : "bg-[#C44934] text-white hover:bg-[#D75A43]",
-    ].join(" ")}
+  "disabled:cursor-not-allowed disabled:opacity-40",
+  "rounded-xl py-3 font-black text-white transition",
+  isCompetition
+    ? sheetTheme
+      ? "hover:brightness-110"
+      : competitionButtonClasses
+    : "bg-[#C44934] hover:bg-[#D75A43]",
+].join(" ")}
+style={
+  isCompetition && sheetTheme
+    ? {
+        backgroundColor: sheetTheme.finalBackground,
+      }
+    : undefined
+}
     >
     {isSavingScore ? "Enregistrement..." : "✓ Valider"}
     </button>
@@ -3570,11 +3909,20 @@ disabled={isSavingScore || (requiresOnlineSave && !isOnline)}
   isSavingScore ||
   (requiresOnlineSave && !isOnline)
 }
+style={
+  sheetTheme
+    ? {
+        borderColor: `${sheetTheme.cardBorder}66`,
+      }
+    : undefined
+}
     className={[
       "disabled:cursor-not-allowed disabled:opacity-40",
       "rounded-xl py-3 font-black transition",
       isCompetition
-      ? "border border-[#CFAF95] bg-[#E8D8C5] text-[#241812] hover:bg-[#F1E4D5]"
+      ? sheetTheme
+  ? "border bg-white/45 text-[#241812] hover:bg-white/65"
+  : "border border-[#CFAF95] bg-[#E8D8C5] text-[#241812] hover:bg-[#F1E4D5]"
       : "bg-[#241A13] text-white hover:bg-[#322217]",
     ].join(" ")}
     >
@@ -3582,12 +3930,22 @@ disabled={isSavingScore || (requiresOnlineSave && !isOnline)}
     </button>
     
     <button
+    style={
+  sheetTheme
+    ? {
+        borderColor: `${sheetTheme.cardBorder}66`,
+        color: modalTextColor ?? "#6B584A",
+      }
+    : undefined
+}
     onClick={closeModal}
     disabled={isSavingScore}
     className={[
       "rounded-xl border py-3 font-black transition",
       isCompetition
-      ? "border-[#CFAF95] text-[#6B584A] hover:bg-[#E8D8C5]"
+  ? sheetTheme
+    ? "hover:bg-white/35"
+    : "border-[#CFAF95] text-[#6B584A] hover:bg-[#E8D8C5]"
       : "border-[#9B6A28]/40 text-slate-300 hover:bg-[#241A13]",
     ].join(" ")}
     >
@@ -3837,12 +4195,13 @@ function HomeMenu({
             </span>
           </div>
 
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/30 px-2 py-4 text-center">
-            <span className="text-3xl opacity-70">🔒</span>
-            <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black text-slate-400 sm:text-base">
-              À venir...
-            </span>
-          </div>
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
+  <span className="text-3xl">🏎️</span>
+
+  <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
+    Grand Prix
+  </span>
+</div>
         </div>
       </div>
 
@@ -3910,7 +4269,7 @@ function HomeMenu({
 
         <div>
           <div className="text-base font-black text-white">
-            Aucune partie en cours
+            Aucune partie rapide en cours
           </div>
 
           <div className="mt-1 text-sm font-medium text-slate-500">
