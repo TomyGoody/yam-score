@@ -152,19 +152,45 @@ export async function rebuildProfileStats(
       
       return;
     }
-    const { data: scoreRows, error: scoresError } =
-    gameIds.length > 0
-    ? await supabase
-    .from("local_game_scores")
-    .select("game_id, player_key, column_id, row_id, value")
-    .in("game_id", gameIds)
-    
-    : { data: [], error: null };
-    
+    type RebuildScoreRow = {
+  id: string;
+  game_id: string;
+  player_key: string;
+  column_id: string;
+  row_id: string;
+  value: string;
+};
+
+const scoreRows: RebuildScoreRow[] = [];
+
+if (gameIds.length > 0) {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+
+  while (true) {
+    const { data: scoreBatch, error: scoresError } = await supabase
+      .from("local_game_scores")
+      .select("id, game_id, player_key, column_id, row_id, value")
+      .in("game_id", gameIds)
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
     if (scoresError) {
       console.error("Erreur rebuild stats - scores", scoresError);
-      return;
+      return false;
     }
+
+    scoreRows.push(...((scoreBatch ?? []) as RebuildScoreRow[]));
+
+    if (!scoreBatch || scoreBatch.length < PAGE_SIZE) {
+      break;
+    }
+
+    from += PAGE_SIZE;
+  }
+}
+
+console.log("Nombre total de scores récupérés :", scoreRows.length);
     
     const stats = {
       games_played_3: 0,
@@ -250,10 +276,14 @@ export async function rebuildProfileStats(
       }
       
       function hasNoX() {
-        return activeColumns.every((column) =>
-          rows.every((row) => getScore(column.id, row.id) !== "X")
-      );
-    }
+  return activeColumns.every((column) =>
+    rows.every((row) => {
+      const value = getScore(column.id, row.id);
+
+      return value !== null && value !== "X";
+    })
+  );
+}
     
     const finalScore = game.final_score ?? 0;
     const finalRank = game.final_rank ?? 999;
@@ -289,7 +319,10 @@ export async function rebuildProfileStats(
       stats.local_games += 1;
     }
     
-    stats.yams_total += countFigure("yam");
+    stats.yams_total +=
+  scores.length > 0
+    ? countFigure("yam")
+    : game.yams_count ?? 0;
     stats.three_of_a_kind_total += countFigure("threeOfAKind");
     stats.full_house_total += countFigure("fullHouse");
     stats.four_of_a_kind_total += countFigure("fourOfAKind");
@@ -301,7 +334,15 @@ export async function rebuildProfileStats(
     competitionMatches?.find(
       (m) => m.id === gameInfo.competition_match_id
     );
-    
+    if (scores.length === 0) {
+  console.warn("FEUILLE DE SCORE MANQUANTE", {
+    gameId: game.game_id,
+    playerKey: game.player_key,
+    mode,
+    finalScore: game.final_score,
+    yamsCount: game.yams_count,
+  });
+}
     const nextMatch =
     nextMatches?.find(
       (m) => m.id === competitionMatch?.next_match_id
@@ -379,7 +420,7 @@ for (const competition of competitions ?? []) {
     stats.grand_prix_titles += 1;
   }
 }
-  console.log("REBUILD STATS FINAL", stats);
+  
   const rpcName = options?.admin
   ? "replace_profile_stats_admin"
   : "replace_my_profile_stats";

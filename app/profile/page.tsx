@@ -1069,7 +1069,7 @@ async function handleRebuildAllProfiles() {
   } else {
     setAchievementStats(refreshedStats);
   }
-
+console.log("PROFILE_STATS RELOADED", refreshedStats);
   if (progressError) {
     console.error(
       "Erreur rechargement de l’XP après rebuild",
@@ -1091,6 +1091,7 @@ async function handleRebuildAllProfiles() {
     setIsRebuildingAllProfiles(false);
   }
 }
+
         return (
           <main className="min-h-screen bg-black px-4 py-8 text-white">
           <div className="mx-auto max-w-6xl">
