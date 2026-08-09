@@ -1921,6 +1921,9 @@ useEffect(() => {
     playerId,
     worldCupFinalReached,
     worldCupWin,
+    grandPrixPlayed,
+grandPrixWin,
+grandPrixPodium,
   }: {
     gameId: string;
     profileId: string;
@@ -1933,6 +1936,9 @@ useEffect(() => {
     playerId: string;
     worldCupFinalReached: number;
     worldCupWin: number;
+    grandPrixPlayed: number;
+  grandPrixWin: number;
+  grandPrixPodium: number;
   }) {
     const is3Cols = mode === "3cols";
     const currentPlayerIdForStats = playerId;
@@ -1972,6 +1978,9 @@ useEffect(() => {
       
       p_world_cup_wins:
       worldCupWin,
+      p_grand_prix_played: grandPrixPlayed,
+p_grand_prix_wins: grandPrixWin,
+p_grand_prix_podiums: grandPrixPodium,
     });
     
     if (error) {
@@ -2259,6 +2268,24 @@ for (const player of leaderboard) {
     player.rank === 1
     ? 1
     : 0,
+    grandPrixPlayed:
+  competitionLocalSet?.competitionType === "grand_prix"
+    ? 1
+    : 0,
+
+grandPrixWin:
+  competitionLocalSet?.competitionType === "grand_prix" &&
+  player.rank === 1
+    ? 1
+    : 0,
+
+grandPrixPodium:
+  competitionLocalSet?.competitionType === "grand_prix" &&
+  playerCount >= 4 &&
+  player.rank >= 1 &&
+  player.rank <= 3
+    ? 1
+    : 0,
   });
   const { error: winStreakError } = await supabase.rpc("update_win_streak", {
     p_game_id: createdGameId,
@@ -2437,19 +2464,18 @@ const {
       competition_finished: boolean;
     }
   );
-if (
-  competitionData?.competition_type === "grand_prix" &&
-  currentUserId
-) {
-  await rebuildProfileStats(currentUserId);
+if (competitionData?.competition_type === "grand_prix") {
+  const linkedProfileIds = players
+    .map((player) => player.linkedUserId)
+    .filter((id): id is string => Boolean(id));
 
-  const grandPrixAchievementResult =
-    await syncProfileAchievements(currentUserId);
+  for (const profileId of [...new Set(linkedProfileIds)]) {
+    const rebuilt = await rebuildProfileStats(profileId);
 
-  console.log(
-    "Succès Grand Prix Local synchronisés",
-    grandPrixAchievementResult
-  );
+    if (rebuilt) {
+      await syncProfileAchievements(profileId);
+    }
+  }
 }
 }
 console.log("✅ Partie locale complètement sauvegardée");

@@ -1400,20 +1400,7 @@ useEffect(() => {
           
           return;
         }
-        if (
-          competitionType === "grand_prix" &&
-          currentUserId
-        ) {
-          await rebuildProfileStats(currentUserId);
-          
-          const grandPrixAchievementResult =
-          await syncProfileAchievements(currentUserId);
-          
-          console.log(
-            "Succès Grand Prix synchronisés",
-            grandPrixAchievementResult
-          );
-        }
+        
         const result = competitionResult as {
           competition_finished: boolean;
         };
