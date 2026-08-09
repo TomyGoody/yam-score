@@ -14,6 +14,8 @@ import type {
 export default function GameScreen({
   fitToScreen,
   setFitToScreen,
+  highContrast,
+  setHighContrast,
   toggleFullscreen,
   quitGame,
     quitLabel,
@@ -53,7 +55,10 @@ export default function GameScreen({
   LeaderboardComponent: React.ComponentType<any>;
   leaderboardProps: Record<string, any>;
   devFillRandomGame?: () => void;
-  
+  highContrast: boolean;
+setHighContrast: (
+  value: boolean | ((current: boolean) => boolean)
+) => void;
   competitionHeader?: CompetitionHeaderData | null;
   onBackToCompetition?: () => void;
 }) {
@@ -137,14 +142,33 @@ export default function GameScreen({
     quitGame={quitGame}
     quitLabel={quitLabel}
     devFillRandomGame={devFillRandomGame}
+    highContrast={highContrast}
+setHighContrast={setHighContrast}
   />
 ) : (
   <div className="relative z-20 flex h-12 shrink-0 items-center justify-between border-b border-slate-800 bg-black px-3">
-    <div className="text-xs font-black uppercase text-white">
-      {fitToScreen ? "Affichage adapté" : "Affichage normal"}
-    </div>
+    <div className="flex shrink-0 items-center gap-3">
+  <div className="text-xs font-black uppercase text-white">
+    {fitToScreen ? "Affichage adapté" : "Affichage normal"}
+  </div>
 
-    <div className="flex gap-2">
+  <button
+  type="button"
+  onClick={() => setHighContrast((current) => !current)}
+  className="shrink-0 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-black transition"
+  style={{
+    backgroundColor: highContrast ? "#D7B53F" : "#241A13",
+    borderColor: highContrast ? "#F0D468" : "rgba(255,255,255,0.15)",
+    color: highContrast ? "#111111" : "#FFFFFF",
+  }}
+  aria-pressed={highContrast}
+  title="Activer ou désactiver le contraste renforcé"
+>
+  Contraste {highContrast ? "✓" : ""}
+</button>
+</div>
+
+<div className="flex min-w-0 items-center gap-2 overflow-x-auto">
       <button
         type="button"
         onClick={() =>
@@ -238,6 +262,7 @@ export default function GameScreen({
       : null
   }
   {...playerSheetProps}
+  highContrast={highContrast}
 />
             ))}
           </div>
@@ -262,6 +287,8 @@ function CompetitionGameHeader({
   toggleFullscreen,
   quitGame,
   quitLabel,
+   highContrast,
+  setHighContrast,
   devFillRandomGame,
   onUndoLastMove,
   onOpenPlayerAccess,
@@ -277,6 +304,10 @@ onUndoLastMove?: () => void;
 quitLabel?: string;
 devFillRandomGame?: () => void;
 onOpenPlayerAccess?: () => void;
+highContrast: boolean;
+setHighContrast: (
+  value: boolean | ((current: boolean) => boolean)
+) => void;
 }) {
   const player1 = players[0];
   const player2 = players[1];
@@ -399,7 +430,22 @@ style={{
   >
     {fitToScreen ? "Taille normale" : "Adapter"}
   </button>
-
+<button
+  type="button"
+  onClick={() => setHighContrast((current) => !current)}
+  className={[
+    "rounded-xl px-4 py-2.5 text-xs font-black transition",
+    competition.competitionType === "world_cup"
+      ? highContrast
+        ? "border border-[#D4A74A] bg-[#D4A74A] text-[#07130D] shadow-[0_0_16px_rgba(212,167,74,0.25)]"
+        : "border border-[#315F2D] bg-[#07130D]/90 text-white hover:border-[#D4A74A]/60 hover:bg-[#0B1E14]"
+      : highContrast
+        ? "border border-white/40 bg-white/90 text-black hover:bg-white"
+        : "bg-black/20 hover:bg-black/35",
+  ].join(" ")}
+>
+  {highContrast ? "Contraste ✓" : "Contraste"}
+</button>
   <button
     type="button"
     onClick={toggleFullscreen}

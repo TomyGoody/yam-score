@@ -40,10 +40,22 @@ const sheetRef = useRef<HTMLDivElement | null>(null);
   const [players, setPlayers] = useState<HistoryPlayer[]>([]);
   const [scores, setScores] = useState<Scores>({});
   const [loading, setLoading] = useState(true);
-
+const [highContrast, setHighContrast] = useState(false);
   const activeColumns =
     game?.mode === "3cols" ? [columns[0], columns[2], columns[4]] : columns;
+useEffect(() => {
+  const savedHighContrast =
+    localStorage.getItem("yam-score-high-contrast") === "true";
 
+  setHighContrast(savedHighContrast);
+}, []);
+
+useEffect(() => {
+  localStorage.setItem(
+    "yam-score-high-contrast",
+    String(highContrast)
+  );
+}, [highContrast]);
   useEffect(() => {
     async function loadGame() {
       const { data: gameData, error: gameError } = await supabase
@@ -128,6 +140,7 @@ const readOnlyPlayerSheetProps = {
   currentPlayerId: null,
   gameFinished: true,
   lastScoreAnimation: null,
+  highContrast,
 };
   function getScore(playerKey: string, columnId: string, rowId: YamRow) {
     return scores[playerKey]?.[columnId]?.[rowId] ?? null;
@@ -207,6 +220,8 @@ function countFigure(playerKey: string, rowId: YamRow) {
       useSideLeaderboard={players.length <= 3}
       viewportRef={viewportRef}
       sheetRef={sheetRef}
+      highContrast={highContrast}
+setHighContrast={setHighContrast}
       fitOffsetX={0}
       fitOffsetY={0}
       fitScale={1}

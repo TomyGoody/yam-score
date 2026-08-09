@@ -89,7 +89,7 @@ export default function Home() {
   const [setupPlayerNames, setSetupPlayerNames] = useState<string[]>([]);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [linkUrl, setLinkUrl] = useState<string | null>(null);
-  
+  const [highContrast, setHighContrast] = useState(false);
   const [linkedProfiles, setLinkedProfiles] = useState<
   Record<
   string,
@@ -187,6 +187,21 @@ const wasOfflineRef = useRef(false);
   gameMode === "6cols"
   ? columns
   : [columns[0], columns[2], columns[4]];
+
+useEffect(() => {
+  const savedHighContrast =
+    localStorage.getItem("yam-score-high-contrast") === "true";
+
+  setHighContrast(savedHighContrast);
+}, []);
+
+useEffect(() => {
+  localStorage.setItem(
+    "yam-score-high-contrast",
+    String(highContrast)
+  );
+}, [highContrast]);
+
   useEffect(() => {
     setSetupPlayerNames((current) =>
       Array.from({ length: playerCount }, (_, index) => {
@@ -2606,7 +2621,8 @@ return (
     useSideLeaderboard={useSideLeaderboard}
     viewportRef={viewportRef}
     sheetRef={sheetRef}
-    
+    highContrast={highContrast}
+setHighContrast={setHighContrast}
     fitOffsetX={fitOffsetX}
     quitLabel={
   competitionLocalSet
@@ -2740,7 +2756,7 @@ return (
       currentPlayerId,
       gameFinished,
       lastScoreAnimation,
-      
+      highContrast,
     }}
     LeaderboardComponent={Leaderboard}
     leaderboardProps={{

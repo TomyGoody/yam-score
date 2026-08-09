@@ -54,6 +54,7 @@ export default function PlayerSheet({
   tournamentTheme,
   grandPrixCircuitId,
   color,
+  highContrast = false,
 }: {
   player: Player;
   getScore: (playerId: string, columnId: string, rowId: YamRow) => ScoreValue;
@@ -89,6 +90,7 @@ export default function PlayerSheet({
     rowId: string;
     value: number | "X";
   } | null;
+  highContrast?: boolean;
 }) {
   
   
@@ -236,6 +238,7 @@ const activeTurnColor =
       lastScoreAnimation={lastScoreAnimation}
       tournamentTheme={activeTheme}
       grandPrixCircuitId={grandPrixCircuitId}
+      highContrast={highContrast}
       />
       </div>
     );
@@ -253,6 +256,7 @@ const activeTurnColor =
   lastScoreAnimation,
   tournamentTheme,
   grandPrixCircuitId,
+  highContrast,
 }: {
     player: Player;
     activeColumns: typeof columns;
@@ -271,6 +275,7 @@ const activeTurnColor =
       value: number | "X";
     } | null;
     tournamentTheme?: TournamentThemeConfig | null;
+    highContrast: boolean;
   }) {
     const gridColumns =
     activeColumns.length === 6
@@ -340,6 +345,32 @@ const sheetTheme =
       buttonBackground: tournamentTheme.buttonBackground,
     }
   : null;
+  const highContrastTotalStyle: React.CSSProperties | undefined =
+  highContrast
+    ? {
+        backgroundColor: "#2F6F73",
+        color: "#FFFFFF",
+        borderColor: "#2B3435",
+      }
+    : undefined;
+
+const highContrastBonusStyle: React.CSSProperties | undefined =
+  highContrast
+    ? {
+        backgroundColor: "#D7B53F",
+        color: "#17130A",
+        borderColor: "#5C4D19",
+      }
+    : undefined;
+
+const highContrastFinalStyle: React.CSSProperties | undefined =
+  highContrast
+    ? {
+        backgroundColor: "#B93A2E",
+        color: "#FFFFFF",
+        borderColor: "#5F1C16",
+      }
+    : undefined;
     function renderColumnCells(row: { id: YamRow; label: string }, rowIndex: number, section: "top" | "bottom") {
       return activeColumns.flatMap((column, index) => {
         const items: React.ReactNode[] = [];
@@ -364,6 +395,7 @@ const sheetTheme =
           playable={isCellPlayable(player.id, column.id, row.id)}
           onSelectCell={onSelectCell}
           lastScoreAnimation={lastScoreAnimation}
+          highContrast={highContrast}
           
           />
         );
@@ -401,7 +433,7 @@ const sheetTheme =
       </div>
       
       {/* Bloc 1 : 1 à Total */}
-      <div className="bg-[#F6EDE3]">
+      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       {rows.slice(0, 6).map((row, rowIndex) => (
         <React.Fragment key={row.id}>
@@ -409,6 +441,9 @@ const sheetTheme =
   isFirstRow={rowIndex === 0}
   tournamentTheme={tournamentTheme}
   sheetTheme={sheetTheme}
+  highContrast={highContrast}
+  rowId={row.id}
+  section="top"
 >
   {row.label}
 </GridLabel>
@@ -417,33 +452,41 @@ const sheetTheme =
       ))}
       
       <TotalGridRow
-      label="Total"
-      cells={activeColumns.map((column) => getTopTotal(player.id, column.id))}
-      activeColumns={activeColumns}
-      gridColumns={gridColumns}
-      labelClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
-}
-cellClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
-}
-labelStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
-}
-cellStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
-}
-      />
+  label="Total"
+  cells={activeColumns.map((column) => getTopTotal(player.id, column.id))}
+  activeColumns={activeColumns}
+  gridColumns={gridColumns}
+  labelClassName={
+    highContrast || sheetTheme
+      ? undefined
+      : "bg-[#EABF9F] text-[#241812]"
+  }
+  cellClassName={
+    highContrast || sheetTheme
+      ? undefined
+      : "bg-[#EABF9F] text-[#241812]"
+  }
+  labelStyle={
+    highContrast
+      ? highContrastTotalStyle
+      : sheetTheme
+        ? {
+            backgroundColor: sheetTheme.totalBackground,
+            color: sheetTheme.totalText,
+          }
+        : undefined
+  }
+  cellStyle={
+    highContrast
+      ? highContrastTotalStyle
+      : sheetTheme
+        ? {
+            backgroundColor: sheetTheme.totalBackground,
+            color: sheetTheme.totalText,
+          }
+        : undefined
+  }
+/>
       
       <TotalGridRow
       label="Bonus"
@@ -451,26 +494,34 @@ cellStyle={
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+  highContrast || sheetTheme
+    ? undefined
+    : "bg-[#EABF9F] text-[#241812]"
 }
 cellClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+  highContrast || sheetTheme
+    ? undefined
+    : "bg-[#EABF9F] text-[#241812]"
 }
 labelStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
+  highContrast
+    ? highContrastBonusStyle
+    : sheetTheme
+      ? {
+          backgroundColor: sheetTheme.totalBackground,
+          color: sheetTheme.totalText,
+        }
+      : undefined
 }
 cellStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
+  highContrast
+    ? highContrastBonusStyle
+    : sheetTheme
+      ? {
+          backgroundColor: sheetTheme.totalBackground,
+          color: sheetTheme.totalText,
+        }
+      : undefined
 }
       />
       
@@ -482,33 +533,41 @@ cellStyle={
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+  highContrast || sheetTheme
+    ? undefined
+    : "bg-[#EABF9F] text-[#241812]"
 }
 cellClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+  highContrast || sheetTheme
+    ? undefined
+    : "bg-[#EABF9F] text-[#241812]"
 }
 labelStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
-}
-cellStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
-}
+    highContrast
+      ? highContrastTotalStyle
+      : sheetTheme
+        ? {
+            backgroundColor: sheetTheme.totalBackground,
+            color: sheetTheme.totalText,
+          }
+        : undefined
+  }
+  cellStyle={
+    highContrast
+      ? highContrastTotalStyle
+      : sheetTheme
+        ? {
+            backgroundColor: sheetTheme.totalBackground,
+            color: sheetTheme.totalText,
+          }
+        : undefined
+  }
       />
       </div>
       </div>
       
       {/* Bloc 2 : - et + */}
-      <div className="bg-[#F6EDE3]">
+      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       {rows.slice(6, 8).map((row, rowIndex) => (
         <React.Fragment key={row.id}>
@@ -516,6 +575,9 @@ cellStyle={
   isFirstRow={rowIndex === 0}
   tournamentTheme={tournamentTheme}
   sheetTheme={sheetTheme}
+  highContrast={highContrast}
+  rowId={row.id}
+  section="bottom"
 >
   {row.label}
 </GridLabel>
@@ -526,7 +588,7 @@ cellStyle={
       </div>
       
       {/* Bloc 3 : Brelan à Yam */}
-      <div className="bg-[#F6EDE3]">
+      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       {rows.slice(8).map((row, rowIndex) => (
         <React.Fragment key={row.id}>
@@ -534,6 +596,9 @@ cellStyle={
   isFirstRow={rowIndex === 0}
   tournamentTheme={tournamentTheme}
   sheetTheme={sheetTheme}
+  highContrast={highContrast}
+  rowId={row.id}
+  section="bottom"
 >
   {row.label}
 </GridLabel>
@@ -544,7 +609,7 @@ cellStyle={
       </div>
       
       {/* Bloc 4 : Total et Final */}
-      <div className="bg-[#F6EDE3]">
+      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       <TotalGridRow
       label="Total"
@@ -552,26 +617,32 @@ cellStyle={
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+  highContrast || sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
 }
 cellClassName={
-  sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
+  highContrast || sheetTheme
+    ? undefined
+    : "bg-[#EABF9F] text-[#241812]"
 }
 labelStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
+  highContrast
+    ? highContrastTotalStyle
+    : sheetTheme
+      ? {
+          backgroundColor: sheetTheme.totalBackground,
+          color: sheetTheme.totalText,
+        }
+      : undefined
 }
 cellStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.totalBackground,
-        color: sheetTheme.totalText,
-      }
-    : undefined
+  highContrast
+    ? highContrastTotalStyle
+    : sheetTheme
+      ? {
+          backgroundColor: sheetTheme.totalBackground,
+          color: sheetTheme.totalText,
+        }
+      : undefined
 }
       isFirstRow
       />
@@ -582,26 +653,30 @@ cellStyle={
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
-  sheetTheme ? undefined : "bg-[#B93A2E] text-white"
+ highContrast || sheetTheme ? undefined : "bg-[#B93A2E] text-white"
 }
 cellClassName={
-  sheetTheme ? undefined : "bg-[#B93A2E] text-white"
+  highContrast || sheetTheme ? undefined : "bg-[#B93A2E] text-white"
 }
 labelStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.finalBackground,
-        color: sheetTheme.finalText,
-      }
-    : undefined
+  highContrast
+    ? highContrastFinalStyle
+    : sheetTheme
+      ? {
+          backgroundColor: sheetTheme.finalBackground,
+          color: sheetTheme.finalText,
+        }
+      : undefined
 }
 cellStyle={
-  sheetTheme
-    ? {
-        backgroundColor: sheetTheme.finalBackground,
-        color: sheetTheme.finalText,
-      }
-    : undefined
+  highContrast
+    ? highContrastFinalStyle
+    : sheetTheme
+      ? {
+          backgroundColor: sheetTheme.finalBackground,
+          color: sheetTheme.finalText,
+        }
+      : undefined
 }
       />
       </div>
@@ -610,31 +685,66 @@ cellStyle={
     );
   }
   function GridLabel({
-    children,
-    isFirstRow = false,
-    tournamentTheme,
-    sheetTheme,
-  }: {
-    children: React.ReactNode;
-    isFirstRow?: boolean;
-    tournamentTheme?: TournamentThemeConfig | null;
-    sheetTheme?: {
-  diceBorder: string;
-  diceDot: string;
-} | null;
-  }) {
+  children,
+  isFirstRow = false,
+  tournamentTheme,
+  sheetTheme,
+  highContrast,
+  rowId,
+  section,
+}: {
+  children: React.ReactNode;
+  isFirstRow?: boolean;
+  tournamentTheme?: TournamentThemeConfig | null;
+  sheetTheme?: {
+    diceBorder: string;
+    diceDot: string;
+  } | null;
+  highContrast: boolean;
+  rowId: YamRow;
+  section: "top" | "bottom";
+}) {
     const dice =
     typeof children === "string" &&
     ["1", "2", "3", "4", "5", "6"].includes(children);
-    
+    const rowIndex = rows.findIndex((row) => row.id === rowId);
+
+const highContrastBackground = highContrast
+  ? section === "top"
+    ? [
+        "#F4E9A6",
+        "#F1E078",
+        "#EED44E",
+        "#E5C52D",
+        "#D7B51E",
+        "#C59E12",
+      ][rowIndex]
+    : [
+        "#B8E5DE", // -
+        "#99D8CE", // +
+        "#8BD5A8", // Brelan
+        "#68C58D", // Full
+        "#46B574", // Quinte
+        "#289B5A", // Carré
+        "#16713F", // Yam
+      ][rowIndex - 6]
+  : undefined;
     return (
       <div
       className={[
-        "flex h-7 items-center justify-center bg-[#EFD7C4] text-xs font-black text-[#241812]",
+  "flex h-7 items-center justify-center text-xs font-black",
+  highContrast
+    ? "text-[#17130A]"
+    : "bg-[#EFD7C4] text-[#241812]",
         CELL_BORDER,
         CELL_BORDER_FIRST_COL,
         isFirstRow ? CELL_BORDER_FIRST_ROW : "",
       ].join(" ")}
+      style={{
+  backgroundColor: highContrastBackground,
+  borderColor: highContrast ? "#4A4A42" : undefined,
+  color: highContrast ? "#17130A" : undefined,
+}}
       >
       {dice ? (
         <div className="flex items-center justify-center gap-2">
@@ -663,6 +773,7 @@ cellStyle={
     lastScoreAnimation,
     isFirstRow = false,
     isBlockStart = false,
+    highContrast,
   }: {
     playerId: string;
     columnId: string;
@@ -680,9 +791,19 @@ cellStyle={
       value: number | "X";
     } | null;
     isFirstRow?: boolean;
+    highContrast: boolean;
   }) {
-    const colorClass =
-    section === "top" ? getTopColor(rowIndex) : getBottomColor(rowIndex);
+    const backgroundColor = highContrast
+  ? section === "top"
+    ? getHighContrastTopColor(rowIndex)
+    : getHighContrastBottomColor(rowId)
+  : undefined;
+
+const colorClass = highContrast
+  ? ""
+  : section === "top"
+    ? getTopColor(rowIndex)
+    : getBottomColor(rowIndex);
     
     const isLastPlayed =
     lastScoreAnimation?.playerId === playerId &&
@@ -691,29 +812,57 @@ cellStyle={
     
     return (
       <div
-      onClick={() => {
-        if (!playable) return;
-        onSelectCell({ playerId, columnId, rowId });
-      }}
+  style={{
+    backgroundColor,
+    borderColor: highContrast ? "#4A4A42" : undefined,
+  }}
+  onClick={() => {
+    if (!playable) return;
+    onSelectCell({ playerId, columnId, rowId });
+  }}
       className={[
-        "flex h-7 items-center justify-center text-sm font-black transition-all duration-200",
-        CELL_BORDER,
-        isFirstRow ? CELL_BORDER_FIRST_ROW : "",
-        isBlockStart ? CELL_BORDER_FIRST_COL : "",
-        isLastPlayed
-        ? "relative z-10 scale-110 animate-cell-score-pop ring-2 ring-[#B84332]/60 shadow-md"
-        : "",
-        colorClass,
-        playable
-        ? "cursor-pointer text-[#241812] hover:brightness-110"
-        : "cursor-not-allowed text-[#241812]",
-      ].join(" ")}
+  "flex h-7 items-center justify-center text-sm font-black transition-all duration-200",
+  CELL_BORDER,
+  
+  isFirstRow ? CELL_BORDER_FIRST_ROW : "",
+  isBlockStart ? CELL_BORDER_FIRST_COL : "",
+  isLastPlayed
+    ? "relative z-10 scale-110 animate-cell-score-pop ring-2 ring-[#B84332]/60 shadow-md"
+    : "",
+  colorClass,
+  playable
+    ? "cursor-pointer text-[#241812] hover:brightness-110"
+    : "cursor-not-allowed text-[#241812]",
+].join(" ")}
       >
       {value === "X" ? <span className="text-black-700">✕</span> : value ?? ""}
       </div>
     );
   }
-  
+  function getHighContrastTopColor(index: number) {
+  return [
+    "#FFFCE8",
+    "#FFF8C7",
+    "#FFF29A",
+    "#FFE86A",
+    "#FFD83D",
+    "#F4C21D",
+  ][index] ?? "#FFFCE8";
+}
+
+function getHighContrastBottomColor(rowId: YamRow) {
+  const rowIndex = rows.findIndex((row) => row.id === rowId);
+
+  return [
+    "#DDF7F3", // -
+    "#C8F1E8", // +
+    "#B6EACB", // Brelan
+    "#91DDAF", // Full
+    "#68CE91", // Quinte
+    "#43B96F", // Carré
+    "#218B4D", // Yam
+  ][rowIndex - 6] ?? "#DDF7F3";
+}
   function TotalGridRow({
   label,
   cells,

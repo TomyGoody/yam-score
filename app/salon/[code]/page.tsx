@@ -116,14 +116,26 @@ export default function SalonAdminPage() {
   useState<number | null>(null);
   const [isWorldCupSemiFinal, setIsWorldCupSemiFinal] =
   useState(false);
-  
+  const [highContrast, setHighContrast] = useState(false);
   const [isWorldCupFinal, setIsWorldCupFinal] =
   useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
   const [playerCount, setPlayerCount] = useState(0);
   const [status, setStatus] = useState<"waiting" | "playing" | "finished">("waiting");
   const [message, setMessage] = useState("");
-  
+  useEffect(() => {
+  const savedHighContrast =
+    localStorage.getItem("yam-score-high-contrast") === "true";
+
+  setHighContrast(savedHighContrast);
+}, []);
+
+useEffect(() => {
+  localStorage.setItem(
+    "yam-score-high-contrast",
+    String(highContrast)
+  );
+}, [highContrast]);
   // 1. LOAD SALON
   async function loadSalon() {
     const { data, error } = await supabase
@@ -1460,6 +1472,8 @@ if (status === "playing" || status === "finished") {
     setFitToScreen={setFitToScreen}
     toggleFullscreen={toggleFullscreen}
     quitGame={quitSalon}
+    highContrast={highContrast}
+setHighContrast={setHighContrast}
     devFillRandomGame={
       process.env.NODE_ENV === "development"
       ? simulateSalonGame
@@ -1533,6 +1547,7 @@ if (status === "playing" || status === "finished") {
       null,
       gameFinished,
       lastScoreAnimation: null,
+      highContrast,
     }}
     LeaderboardComponent={Leaderboard}
     leaderboardProps={{
