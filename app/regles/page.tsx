@@ -147,6 +147,27 @@ export default function RulesPage() {
             <FigureCard title="Yam" score="60 points" />
             <FigureCard title="+ / −" score="5 à 30 points" />
           </div>
+          <div className="mt-5 rounded-2xl border border-[#9B6A28]/40 bg-black/30 p-5">
+  <p className="text-sm font-black uppercase tracking-wider text-[#C44934]">
+    🎲 Règle spéciale du Yam
+  </p>
+
+  <p className="mt-3 font-bold leading-relaxed text-slate-300">
+    Lorsqu’un joueur réalise un Yam, s’il possède encore une case Yam
+    disponible, il est obligé de jouer son score dans une case Yam.
+  </p>
+
+  <p className="mt-3 font-bold leading-relaxed text-slate-300">
+    Si aucune case Yam n’est disponible, le Yam peut être utilisé dans
+    n’importe quelle autre figure ou dans la partie supérieure de la feuille.
+  </p>
+
+  <p className="mt-3 font-bold leading-relaxed text-slate-300">
+    Dans la partie supérieure, un Yam peut être inscrit sur la valeur obtenue
+    ou sur une valeur inférieure. Par exemple, un Yam de 6 peut rapporter
+    30 points aux 6, 25 aux 5, 20 aux 4, 15 aux 3, 10 aux 2 ou 5 aux 1.
+  </p>
+</div>
         </section>
       </div>
     </main>

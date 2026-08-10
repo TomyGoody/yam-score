@@ -114,7 +114,7 @@ export const GRAND_PRIX_CIRCUIT_THEMES: Record<
     name: "Grand Prix d’Australie",
     shortName: "Melbourne",
     icon: "🇦🇺",
-    flagImage: "/grand-prix/flags/AU.svg",
+    flagImage: "/grand-prix/flags/au.svg",
 
     pageBackgroundColor: "#020B10",
     panelBackgroundColor: "#082E45",
@@ -156,7 +156,7 @@ backgroundImage:
     name: "Grand Prix de Bahreïn",
     shortName: "Bahreïn",
     icon: "🇧🇭",
-flagImage: "/grand-prix/flags/BH.svg",
+flagImage: "/grand-prix/flags/bh.svg",
     pageBackgroundColor: "#100803",
     panelBackgroundColor: "#39200C",
 
@@ -197,7 +197,7 @@ backgroundImage:
     name: "Grand Prix d’Arabie saoudite",
     shortName: "Djeddah",
     icon: "🇸🇦",
-    flagImage: "/grand-prix/flags/SA.svg",
+    flagImage: "/grand-prix/flags/sa.svg",
     pageBackgroundColor: "#020D0A",
     panelBackgroundColor: "#063B2E",
 
@@ -238,7 +238,7 @@ backgroundImage:
     name: "Grand Prix du Japon",
     shortName: "Suzuka",
     icon: "🇯🇵",
-    flagImage: "/grand-prix/flags/JP.svg",
+    flagImage: "/grand-prix/flags/jp.svg",
     pageBackgroundColor: "#090203",
     panelBackgroundColor: "#28050A",
 
@@ -279,7 +279,7 @@ backgroundImage:
     name: "Grand Prix de Chine",
     shortName: "Shanghai",
     icon: "🇨🇳",
-    flagImage: "/grand-prix/flags/CN.svg",
+    flagImage: "/grand-prix/flags/cn.svg",
     pageBackgroundColor: "#100302",
     panelBackgroundColor: "#450B09",
 
@@ -320,7 +320,7 @@ backgroundImage:
     name: "Grand Prix d’Émilie-Romagne",
     shortName: "Imola",
     icon: "🇮🇹",
-    flagImage: "/grand-prix/flags/IT.svg",
+    flagImage: "/grand-prix/flags/it.svg",
     pageBackgroundColor: "#020A06",
     panelBackgroundColor: "#09351D",
 
@@ -361,7 +361,7 @@ backgroundImage:
     name: "Grand Prix de Monaco",
     shortName: "Monaco",
     icon: "🇲🇨",
-    flagImage: "/grand-prix/flags/MC.svg",
+    flagImage: "/grand-prix/flags/mc.svg",
     pageBackgroundColor: "#0A0203",
     panelBackgroundColor: "#210609",
 
@@ -402,7 +402,7 @@ backgroundImage:
     name: "Grand Prix d’Espagne",
     shortName: "Barcelone",
     icon: "🇪🇸",
-    flagImage: "/grand-prix/flags/ES.svg",
+    flagImage: "/grand-prix/flags/es.svg",
     pageBackgroundColor: "#100901",
     panelBackgroundColor: "#4D2C04",
 
@@ -443,7 +443,7 @@ backgroundImage:
     name: "Grand Prix du Canada",
     shortName: "Montréal",
     icon: "🇨🇦",
-    flagImage: "/grand-prix/flags/CA.svg",
+    flagImage: "/grand-prix/flags/ca.svg",
     pageBackgroundColor: "#0B0202",
     panelBackgroundColor: "#310909",
 
@@ -484,7 +484,7 @@ backgroundImage:
     name: "Grand Prix d’Autriche",
     shortName: "Spielberg",
     icon: "🇦🇹",
-    flagImage: "/grand-prix/flags/AT.svg",
+    flagImage: "/grand-prix/flags/at.svg",
     pageBackgroundColor: "#0B0203",
     panelBackgroundColor: "#31080D",
 
@@ -525,7 +525,7 @@ backgroundImage:
     name: "Grand Prix de Grande-Bretagne",
     shortName: "Silverstone",
     icon: "🇬🇧",
-    flagImage: "/grand-prix/flags/GB.svg",
+    flagImage: "/grand-prix/flags/gb.svg",
     pageBackgroundColor: "#02050D",
     panelBackgroundColor: "#09132E",
 
@@ -566,7 +566,7 @@ backgroundImage:
     name: "Grand Prix de Belgique",
     shortName: "Spa-Francorchamps",
     icon: "🇧🇪",
-    flagImage: "/grand-prix/flags/BE.svg",
+    flagImage: "/grand-prix/flags/be.svg",
     pageBackgroundColor: "#080702",
     panelBackgroundColor: "#1F1A05",
 
@@ -607,7 +607,7 @@ backgroundImage:
     name: "Grand Prix des Pays-Bas",
     shortName: "Zandvoort",
     icon: "🇳🇱",
-    flagImage: "/grand-prix/flags/NL.svg",
+    flagImage: "/grand-prix/flags/nl.svg",
     pageBackgroundColor: "#100703",
     panelBackgroundColor: "#422008",
 
@@ -651,7 +651,7 @@ backgroundImage:
 
     pageBackgroundColor: "#020A06",
     panelBackgroundColor: "#071F13",
-    flagImage: "/grand-prix/flags/IT.svg",
+    flagImage: "/grand-prix/flags/it.svg",
     border: "border-[#22A45D]",
     accentBackground: "bg-[#22A45D]",
     accentText: "text-[#58C58C]",
@@ -689,7 +689,7 @@ backgroundImage:
     name: "Grand Prix de Singapour",
     shortName: "Singapour",
     icon: "🇸🇬",
-    flagImage: "/grand-prix/flags/SG.svg",
+    flagImage: "/grand-prix/flags/sg.svg",
     pageBackgroundColor: "#07020B",
     panelBackgroundColor: "#1C0828",
 
@@ -730,7 +730,7 @@ backgroundImage:
     name: "Grand Prix des États-Unis",
     shortName: "Austin",
     icon: "🇺🇸",
-    flagImage: "/grand-prix/flags/US.svg",
+    flagImage: "/grand-prix/flags/us.svg",
     pageBackgroundColor: "#02050D",
     panelBackgroundColor: "#0A1738",
 
@@ -771,7 +771,7 @@ backgroundImage:
     name: "Grand Prix du Mexique",
     shortName: "Mexico",
     icon: "🇲🇽",
-    flagImage: "/grand-prix/flags/MX.svg",
+    flagImage: "/grand-prix/flags/mx.svg",
     pageBackgroundColor: "#020A06",
     panelBackgroundColor: "#08351E",
 
@@ -812,7 +812,7 @@ backgroundImage:
     name: "Grand Prix de São Paulo",
     shortName: "Interlagos",
     icon: "🇧🇷",
-    flagImage: "/grand-prix/flags/BR.svg",
+    flagImage: "/grand-prix/flags/br.svg",
 
     pageBackgroundColor: "#060A02",
     panelBackgroundColor: "#1A2B08",
