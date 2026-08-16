@@ -677,14 +677,19 @@ return (
   <div className="relative z-10 px-5 py-8 sm:px-8 sm:py-10">
   <div className="text-center">
   <div className="flex justify-center">
-  <Image
-    src={tournament.headerLogo}
-    alt={tournament.name}
-    width={96}
-    height={96}
-    className="h-24 w-auto object-contain drop-shadow-xl"
-    priority
-  />
+  {tournament.headerLogo ? (
+    <Image
+      src={tournament.headerLogo}
+      alt={tournament.name}
+      width={80}
+      height={80}
+      className="object-contain"
+    />
+  ) : (
+    <div className="text-5xl">
+      {tournament.icon}
+    </div>
+  )}
 </div>
   
   <p className="mt-4 text-sm font-black uppercase tracking-[0.3em] text-white/70">

@@ -40,6 +40,7 @@ export default function PlayerPage() {
   | "grand_slam_final"
   | "world_cup"
   | "grand_prix"
+  | "basket"
   | null
 >(null);
   
@@ -58,7 +59,11 @@ export default function PlayerPage() {
   
   const [connectedProfileName, setConnectedProfileName] =
   useState<string | null>(null);
-  
+  const [basketTeam, setBasketTeam] =
+  useState<"A" | "B" | null>(null);
+
+const [basketQuarter, setBasketQuarter] =
+  useState<1 | 2 | 3 | 4>(1);
   const [accessStatus, setAccessStatus] =
   useState<AccessStatus>("checking");
   const [gameMode, setGameMode] = useState<GameMode>("6cols");
@@ -70,12 +75,62 @@ export default function PlayerPage() {
   const [finalScores, setFinalScores] = useState<
   { player_id: string; value: string }[]
   >([]);
+  useEffect(() => {
+  if (
+    !gameId ||
+    competitionType !== "basket"
+  ) {
+    return;
+  }
+
+  const channel = supabase
+    .channel(
+      `basket_quarter_${gameId}`
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "yam_scores",
+        filter: `game_id=eq.${gameId}`,
+      },
+      async () => {
+        const {
+          data: game,
+          error,
+        } = await supabase
+          .from("yam_games")
+          .select(
+            "player_count, mode"
+          )
+          .eq("id", gameId)
+          .single();
+
+        if (error || !game) return;
+
+        await loadBasketQuarter(
+          gameId,
+          game.player_count,
+          game.mode
+        );
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [
+  gameId,
+  competitionType,
+]);
   async function loadFinalResults(currentGameId: string) {
     const { data: playersData } = await supabase
     .from("yam_players")
     .select("*")
     .eq("game_id", currentGameId);
-    console.log("FINAL PLAYERS", playersData);
+    
     const { data: scoresData } = await supabase
     .from("yam_scores")
     .select("player_id, value")
@@ -84,6 +139,63 @@ export default function PlayerPage() {
     setFinalPlayers(playersData ?? []);
     setFinalScores(scoresData ?? []);
   }
+  async function loadBasketQuarter(
+  currentGameId: string,
+  playerCount: number,
+  mode: GameMode
+) {
+  if (playerCount <= 0) return;
+
+  const {
+    count,
+    error,
+  } = await supabase
+    .from("yam_scores")
+    .select("*", {
+      count: "exact",
+      head: true,
+    })
+    .eq("game_id", currentGameId);
+
+  if (error) {
+    console.error(
+      "Erreur calcul quart-temps Basket",
+      error
+    );
+    return;
+  }
+
+  const totalPlayedMoves = count ?? 0;
+
+  const nextMoveNumber =
+    Math.floor(totalPlayedMoves / playerCount) + 1;
+
+  let nextQuarter: 1 | 2 | 3 | 4;
+
+  if (mode === "3cols") {
+    if (nextMoveNumber <= 10) {
+      nextQuarter = 1;
+    } else if (nextMoveNumber <= 20) {
+      nextQuarter = 2;
+    } else if (nextMoveNumber <= 30) {
+      nextQuarter = 3;
+    } else {
+      nextQuarter = 4;
+    }
+  } else {
+    if (nextMoveNumber <= 20) {
+      nextQuarter = 1;
+    } else if (nextMoveNumber <= 40) {
+      nextQuarter = 2;
+    } else if (nextMoveNumber <= 59) {
+      nextQuarter = 3;
+    } else {
+      nextQuarter = 4;
+    }
+  }
+
+  setBasketQuarter(nextQuarter);
+}
   async function loadPlayerSession() {
     setAccessStatus("checking");
     setMessage("Chargement...");
@@ -93,6 +205,7 @@ export default function PlayerPage() {
     .select(`
   id,
   mode,
+  player_count,
   current_player_order,
   status,
   competition_id,
@@ -115,7 +228,12 @@ export default function PlayerPage() {
       setCompetitionRoundNumber(
         game.competition_round_number ?? null
       );
-      
+      let loadedCompetitionType:
+  | "grand_slam_final"
+  | "world_cup"
+  | "grand_prix"
+  | "basket"
+  | null = null;
       if (game.competition_id) {
   const { data: competitionResult, error: competitionError } =
     await supabase.rpc("get_salon_competition_theme", {
@@ -140,37 +258,38 @@ setGrandPrixCircuitId(null);
     competitionData.competition_type as
       | "grand_slam_final"
       | "world_cup"
+      | "basket"
       | "grand_prix";
-
+loadedCompetitionType = nextCompetitionType;
   setCompetitionType(nextCompetitionType);
 
   if (nextCompetitionType === "grand_prix") {
   const circuitId =
     competitionData.circuit_id ?? null;
-const circuitTheme =
-  getGrandPrixCircuitTheme(circuitId);
 
-console.log("GRAND PRIX MOBILE THEME", {
-  competitionData,
-  circuitId,
-  normalizedCircuitId:
-    circuitId?.trim().toLowerCase().replaceAll("-", "_"),
-  circuitTheme,
-});
+  const circuitTheme =
+    getGrandPrixCircuitTheme(circuitId);
 
-setGrandPrixCircuitId(circuitId);
-setCompetitionTheme(circuitTheme);
-  
+  setGrandPrixCircuitId(circuitId);
+  setCompetitionTheme(circuitTheme);
+
+} else if (nextCompetitionType === "basket") {
+  setGrandPrixCircuitId(null);
+
+  // Pour l'instant on garde le thème générique du Salon.
+  // On stylisera Basket ensuite.
+  setCompetitionTheme(null);
+
 } else {
-    const nextTheme =
-      competitionData.theme as TournamentTheme;
+  const nextTheme =
+    competitionData.theme as TournamentTheme;
 
-    setGrandPrixCircuitId(null);
+  setGrandPrixCircuitId(null);
 
-    setCompetitionTheme(
-      getTournamentTheme(nextTheme)
-    );
-  }
+  setCompetitionTheme(
+    getTournamentTheme(nextTheme)
+  );
+}
 } else {
   setCompetitionType(null);
   setCompetitionTheme(null);
@@ -183,11 +302,13 @@ setCompetitionTheme(circuitTheme);
   setGrandPrixCircuitId(null);
 }
       const { data: player, error: playerError } = await supabase
-      .from("yam_players")
-      .select("id, name, profile_id")
-      .eq("game_id", game.id)
-      .eq("player_order", order)
-      .single();
+  .from("yam_players")
+  .select(
+    "id, name, profile_id, competition_player_id"
+  )
+  .eq("game_id", game.id)
+  .eq("player_order", order)
+  .single();
       
       if (playerError || !player) {
         setMessage("Joueur introuvable.");
@@ -197,6 +318,41 @@ setCompetitionTheme(circuitTheme);
       setPlayerId(player.id);
       setPlayerName(player.name);
       setExpectedProfileId(player.profile_id ?? null);
+      if (
+  loadedCompetitionType === "basket" &&
+  player.competition_player_id &&
+  game.competition_id
+) {
+  const {
+    data: basketTeamResult,
+    error: basketTeamError,
+  } = await supabase.rpc(
+    "get_salon_basket_player_team",
+    {
+      p_game_id: game.id,
+      p_player_id: player.id,
+    }
+  );
+
+  if (basketTeamError) {
+  console.error(
+    "Erreur chargement équipe Basket joueur",
+    basketTeamError
+  );
+
+  setBasketTeam(null);
+} else {
+  setBasketTeam(
+    (basketTeamResult as "A" | "B" | null) ?? null
+  );
+}
+
+await loadBasketQuarter(
+  game.id,
+  game.player_count,
+  game.mode as GameMode
+);
+}
       const deviceId = getSalonDeviceId();
       
       const {
@@ -438,9 +594,11 @@ setCompetitionTheme(circuitTheme);
         <p className="mt-4 font-bold text-slate-400">
   Cette place n’est associée à aucun profil. Les statistiques de cette{" "}
   {competitionType === "world_cup"
-    ? "partie de Coupe du Monde"
-    : competitionType === "grand_prix"
-      ? "course"
+  ? "partie de Coupe du Monde"
+  : competitionType === "grand_prix"
+    ? "course"
+    : competitionType === "basket"
+      ? "match Basket"
       : competitionType === "grand_slam_final"
         ? "partie de Grand Chelem"
         : "partie"}{" "}
@@ -636,21 +794,25 @@ setCompetitionTheme(circuitTheme);
           ].join(" ")}
         >
           {competitionType === "grand_prix"
-            ? competitionTheme?.name ?? "Grand Prix"
-            : competitionType === "world_cup"
-              ? "Coupe du Monde"
-              : competitionType === "grand_slam_final"
-                ? competitionTheme?.name ?? "Grand Chelem"
-                : `Salon ${code}`}
+  ? competitionTheme?.name ?? "Grand Prix"
+  : competitionType === "world_cup"
+    ? "Coupe du Monde"
+    : competitionType === "basket"
+      ? "🏀 Basket"
+      : competitionType === "grand_slam_final"
+        ? competitionTheme?.name ?? "Grand Chelem"
+        : `Salon ${code}`}
         </div>
 
         {competitionType && (
           <div className="mt-2 text-sm font-bold text-white/65">
             {competitionType === "grand_prix"
-              ? `Manche ${competitionRoundNumber ?? 1}`
-              : competitionType === "world_cup"
-                ? `Match ${competitionRoundNumber ?? 1}`
-                : `Finale · Set ${competitionRoundNumber ?? 1}`}
+  ? `Manche ${competitionRoundNumber ?? 1}`
+  : competitionType === "world_cup"
+    ? `Match ${competitionRoundNumber ?? 1}`
+    : competitionType === "basket"
+      ? `Match ${competitionRoundNumber ?? 1}`
+      : `Finale · Set ${competitionRoundNumber ?? 1}`}
           </div>
         )}
 
@@ -881,13 +1043,12 @@ const finalButtonBorder =
     </main>
   );
 }
-    console.log("COMPETITION CHECK", {
-  order,
-  isCompetitionSalon,
-  competitionType,
-  competitionTheme,
-});
-    if (isCompetitionSalon && competitionTheme && competitionType) {
+    
+    if (
+  isCompetitionSalon &&
+  competitionType &&
+  (competitionTheme || competitionType === "basket")
+) {
   return (
     <CompetitionPlayerMobileSheet
       code={code}
@@ -902,6 +1063,8 @@ const finalButtonBorder =
       competitionTheme={competitionTheme}
       competitionRoundNumber={competitionRoundNumber}
       grandPrixCircuitId={grandPrixCircuitId}
+      basketTeam={basketTeam}
+basketQuarter={basketQuarter}
     />
   );
 }
@@ -932,6 +1095,8 @@ return (
   competitionTheme,
   grandPrixCircuitId,
   competitionRoundNumber,
+  basketTeam,
+basketQuarter,
 }: {
   code: string;
   playerName: string;
@@ -945,9 +1110,12 @@ return (
   competitionType:
   | "grand_slam_final"
   | "world_cup"
+  | "basket"
   | "grand_prix";
-  competitionTheme: TournamentThemeConfig;
+  competitionTheme: TournamentThemeConfig | null;
   competitionRoundNumber: number | null;
+  basketTeam: "A" | "B" | null;
+basketQuarter: 1 | 2 | 3 | 4;
 }) {
   return (
   <ClassicPlayerMobileSheet
@@ -963,6 +1131,8 @@ return (
     competitionTheme={competitionTheme}
     competitionRoundNumber={competitionRoundNumber}
     grandPrixCircuitId={grandPrixCircuitId}
+    basketTeam={basketTeam}
+  basketQuarter={basketQuarter}
   />
 );
 }
@@ -979,6 +1149,8 @@ return (
 competitionTheme,
 competitionRoundNumber,
 grandPrixCircuitId,
+basketTeam,
+basketQuarter,
   }: {
     code: string;
     playerName: string;
@@ -992,17 +1164,25 @@ grandPrixCircuitId,
     competitionType?:
   | "grand_slam_final"
   | "world_cup"
-  | "grand_prix";
-  competitionTheme?: TournamentThemeConfig;
+  | "grand_prix"
+  | "basket";
+  competitionTheme?: TournamentThemeConfig | null;
   competitionRoundNumber?: number | null;
+  basketTeam?: "A" | "B" | null;
+basketQuarter?: 1 | 2 | 3 | 4;
   }) {
     const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
     const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
     const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const [filledCells, setFilledCells] = useState<string[]>([]);
     const [playerScores, setPlayerScores] = useState<
-    { column_id: string; row_id: string; value: string }[]
-    >([]);
+  {
+    column_id: string;
+    row_id: string;
+    value: string;
+    basket_quarter: number | null;
+  }[]
+>([]);
     const playerColors = [
       {
         text: "text-[#C44934]",
@@ -1017,12 +1197,14 @@ grandPrixCircuitId,
     const playerColor = playerColors[0];
     const isMyTurn = selectedOrder === currentPlayerOrder;
     const isCompetition = Boolean(
-  competitionType && competitionTheme
+  competitionType &&
+  (competitionTheme || competitionType === "basket")
 );
 
 const isWorldCup =
   competitionType === "world_cup";
-
+const isBasket =
+  competitionType === "basket";
 const isGrandPrix =
   competitionType === "grand_prix";
  function getThemeColor(
@@ -1066,13 +1248,17 @@ const competitionLabel = isWorldCup
   ? "Coupe du Monde"
   : isGrandPrix
     ? competitionTheme?.name ?? "Grand Prix"
-    : competitionTheme?.name ?? "";
+    : isBasket
+      ? "🏀 Basket"
+      : competitionTheme?.name ?? "";
 
 const roundLabel = isWorldCup
   ? `Match ${competitionRoundNumber ?? 1}`
   : isGrandPrix
     ? `Manche ${competitionRoundNumber ?? 1}`
-    : `Finale · Set ${competitionRoundNumber ?? 1}`;
+    : isBasket
+      ? `Match ${competitionRoundNumber ?? 1}`
+      : `Finale · Set ${competitionRoundNumber ?? 1}`;
     const activeColumns =
     gameMode === "6cols"
     ? columns
@@ -1160,10 +1346,12 @@ async function loadFilledCells() {
   
   const { data, error } = await supabase
   .from("yam_scores")
-  .select("column_id, row_id, value")
+  .select(
+  "column_id, row_id, value, basket_quarter"
+)
   .eq("game_id", gameId)
   .eq("player_id", playerId);
-  console.log("Polling", data);
+  
   if (error) {
     console.error(error);
     return;
@@ -1210,17 +1398,21 @@ async function saveMobileScore(
   if (!gameId || !playerId) return;
   
   const { error } = await supabase.from("yam_scores").upsert(
-    {
-      game_id: gameId,
-      player_id: playerId,
-      column_id: columnId,
-      row_id: rowId,
-      value: String(value),
-    },
-    {
-      onConflict: "game_id,player_id,column_id,row_id",
-    }
-  );
+  {
+    game_id: gameId,
+    player_id: playerId,
+    column_id: columnId,
+    row_id: rowId,
+    value: String(value),
+
+    basket_quarter: isBasket
+      ? basketQuarter ?? 1
+      : null,
+  },
+  {
+    onConflict: "game_id,player_id,column_id,row_id",
+  }
+);
   
   if (error) {
     console.error(error);
@@ -1291,26 +1483,49 @@ function renderRowButton(row: (typeof rows)[number]) {
     }, 100);
   }}
   className={[
-    "flex h-14 w-full items-center justify-center rounded-xl border font-black transition",
-    !isPlayable
-      ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
-      : "",
-  ].join(" ")}
-  style={
-    isPlayable && competitionTheme
+  "flex h-14 w-full items-center justify-center rounded-xl border font-black transition",
+
+  !isPlayable
+    ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
+    : "",
+].join(" ")}
+style={
+  isPlayable
+    ? isBasket
       ? {
           backgroundColor:
             selectedRowId === row.id
-              ? themeButtonBackground
-              : themeScoreBackground,
-          color:
-            selectedRowId === row.id
-              ? themeButtonText
-              : themeScoreText,
-          borderColor: themeBorder,
+              ? basketTeam === "A"
+                ? "#E87524"
+                : "#2563EB"
+              : basketTeam === "A"
+                ? "rgba(232,117,36,0.12)"
+                : "rgba(37,99,235,0.12)",
+
+          color: "#FFFFFF",
+
+          borderColor:
+            basketTeam === "A"
+              ? "#E87524"
+              : "#2563EB",
         }
-      : undefined
-  }
+      : competitionTheme
+        ? {
+            backgroundColor:
+              selectedRowId === row.id
+                ? themeButtonBackground
+                : themeScoreBackground,
+
+            color:
+              selectedRowId === row.id
+                ? themeButtonText
+                : themeScoreText,
+
+            borderColor: themeBorder,
+          }
+        : undefined
+    : undefined
+}
 >
   <span className="text-base">
     {isFilled ? "✓ " : ""}
@@ -1328,21 +1543,41 @@ function renderRowButton(row: (typeof rows)[number]) {
     saveMobileScore(selectedColumnId, row.id, value)
   }
   className="rounded-xl border p-3 font-black transition"
-  style={
-    competitionTheme
+style={
+  isBasket
+    ? {
+        backgroundColor:
+          value === "X"
+            ? basketTeam === "A"
+              ? "#E87524"
+              : "#2563EB"
+            : basketTeam === "A"
+              ? "rgba(232,117,36,0.12)"
+              : "rgba(37,99,235,0.12)",
+
+        color: "#FFFFFF",
+
+        borderColor:
+          basketTeam === "A"
+            ? "#E87524"
+            : "#2563EB",
+      }
+    : competitionTheme
       ? {
           backgroundColor:
             value === "X"
               ? themeButtonBackground
               : themeScoreBackground,
+
           color:
             value === "X"
               ? themeButtonText
               : themeScoreText,
+
           borderColor: themeBorder,
         }
       : undefined
-  }
+}
 >
   {value}
 </button>
@@ -1398,9 +1633,13 @@ return (
             : undefined
         }
       >
-        {isCompetition && competitionTheme ? (
+        {isCompetition ? (
           <>
-            {competitionTheme.flagImage ? (
+            {isBasket ? (
+  <div className="text-5xl">
+    🏀
+  </div>
+) : competitionTheme?.flagImage ? (
   <Image
     src={competitionTheme.flagImage}
     alt={`Drapeau — ${competitionTheme.name}`}
@@ -1409,7 +1648,7 @@ return (
     className="mx-auto h-14 w-auto rounded-md object-contain drop-shadow-xl"
     priority
   />
-) : competitionTheme.headerLogo ? (
+) : competitionTheme?.headerLogo ? (
   <Image
     src={competitionTheme.headerLogo}
     alt={competitionTheme.name}
@@ -1420,15 +1659,17 @@ return (
   />
 ) : (
   <div className="text-5xl">
-    {competitionTheme.icon ?? "🏁"}
+    {competitionTheme?.icon ?? "🏁"}
   </div>
 )}
 
             <div
               className={[
-                "mt-3 text-sm font-black uppercase tracking-[0.18em]",
-                competitionTheme.accentText,
-              ].join(" ")}
+  "mt-3 text-sm font-black uppercase tracking-[0.18em]",
+  isBasket
+    ? "text-[#E87524]"
+    : competitionTheme?.accentText ?? "text-[#C44934]",
+].join(" ")}
             >
               {competitionLabel}
             </div>
@@ -1436,7 +1677,29 @@ return (
             <div className="mt-1 text-sm font-bold text-white/70">
               {roundLabel}
             </div>
+{isBasket && (
+  <div className="mt-3 flex items-center justify-center gap-3 text-sm font-black">
+    <span
+      className="rounded-full px-3 py-1"
+      style={{
+        backgroundColor:
+          basketTeam === "A"
+            ? "rgba(232,117,36,0.18)"
+            : "rgba(37,99,235,0.18)",
+        color:
+          basketTeam === "A"
+            ? "#E87524"
+            : "#60A5FA",
+      }}
+    >
+      Équipe {basketTeam ?? "?"}
+    </span>
 
+    <span className="rounded-full bg-white/10 px-3 py-1 text-white/70">
+      Q{basketQuarter ?? 1}
+    </span>
+  </div>
+)}
             <h1 className="mt-3 text-4xl font-black">
               {playerName}
             </h1>
@@ -1459,37 +1722,88 @@ return (
           </>
         )}
   <div className="mt-3 grid grid-cols-2 gap-3">
-  <div className="rounded-xl bg-[#F4E9DC] p-3 text-black">
-  <div className="text-xs font-black uppercase text-slate-500">
-  Score
-  </div>
   <div
-  className={[
-    "mt-1 text-2xl font-black",
-    competitionTheme
-      ? competitionTheme.accentDarkText
-      : playerColor.text,
-  ].join(" ")}
+  className="rounded-xl border p-3"
+  style={
+    isBasket
+      ? {
+          backgroundColor:
+            basketTeam === "A"
+              ? "rgba(232,117,36,0.12)"
+              : "rgba(37,99,235,0.12)",
+          borderColor:
+            basketTeam === "A"
+              ? "#E87524"
+              : "#2563EB",
+          color: "#FFFFFF",
+        }
+      : undefined
+  }
 >
-  {playerTotal}
-</div>
+  <div
+    className={[
+      "text-xs font-black uppercase",
+      isBasket ? "text-white/60" : "text-slate-500",
+    ].join(" ")}
+  >
+    Score
   </div>
+
+  <div
+    className={[
+      "mt-1 text-2xl font-black",
+      isBasket
+        ? "text-white"
+        : competitionTheme
+          ? competitionTheme.accentDarkText
+          : playerColor.text,
+    ].join(" ")}
+  >
+    {playerTotal}
+  </div>
+</div>
   
-  <div className="rounded-xl bg-[#F4E9DC] p-3 text-black">
-  <div className="text-xs font-black uppercase text-slate-500">
-  Restants
-  </div>
+ 
   <div
-  className={[
-    "mt-1 text-2xl font-black",
-    competitionTheme
-      ? competitionTheme.accentDarkText
-      : playerColor.text,
-  ].join(" ")}
+  className="rounded-xl border p-3"
+  style={
+    isBasket
+      ? {
+          backgroundColor:
+            basketTeam === "A"
+              ? "rgba(232,117,36,0.12)"
+              : "rgba(37,99,235,0.12)",
+          borderColor:
+            basketTeam === "A"
+              ? "#E87524"
+              : "#2563EB",
+          color: "#FFFFFF",
+        }
+      : undefined
+  }
 >
-  {remainingMoves}
-</div>
+  <div
+    className={[
+      "text-xs font-black uppercase",
+      isBasket ? "text-white/60" : "text-slate-500",
+    ].join(" ")}
+  >
+    Restants
   </div>
+
+  <div
+    className={[
+      "mt-1 text-2xl font-black",
+      isBasket
+        ? "text-white"
+        : competitionTheme
+          ? competitionTheme.accentDarkText
+          : playerColor.text,
+    ].join(" ")}
+  >
+    {remainingMoves}
+  </div>
+</div>
   </div>
   <p
   className={[
@@ -1533,24 +1847,44 @@ return (
     setSelectedRowId(null);
   }}
   className={[
-    "min-h-[56px] rounded-2xl border p-3 text-center font-black transition",
-    !isMyTurn
-      ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
-      : "",
-  ].join(" ")}
-  style={
-    isMyTurn && competitionTheme
+  "min-h-[56px] rounded-2xl border p-3 text-center font-black transition",
+
+  !isMyTurn
+    ? "cursor-not-allowed border-slate-900 bg-slate-950 text-slate-600"
+    : "",
+].join(" ")}
+style={
+  isMyTurn
+    ? isBasket
       ? {
           backgroundColor: isSelected
-            ? themeButtonBackground
-            : themeScoreBackground,
-          color: isSelected
-            ? themeButtonText
-            : themeScoreText,
-          borderColor: themeBorder,
+            ? basketTeam === "A"
+              ? "#E87524"
+              : "#2563EB"
+            : basketTeam === "A"
+              ? "rgba(232,117,36,0.12)"
+              : "rgba(37,99,235,0.12)",
+
+          color: "#FFFFFF",
+
+          borderColor:
+            basketTeam === "A"
+              ? "#E87524"
+              : "#2563EB",
         }
-      : undefined
-  }
+      : competitionTheme
+        ? {
+            backgroundColor: isSelected
+              ? themeButtonBackground
+              : themeScoreBackground,
+            color: isSelected
+              ? themeButtonText
+              : themeScoreText,
+            borderColor: themeBorder,
+          }
+        : undefined
+    : undefined
+}
 >
   {label}
 </button>

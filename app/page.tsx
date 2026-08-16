@@ -19,7 +19,7 @@ import {
   achievementDefinitions,
   BADGE_XP,
   FIGURE_XP,
-  
+  BASKET_XP,
   getParticipationXp,
   getRankXp,
   getUnlockedMilestoneIndexes,
@@ -32,33 +32,35 @@ import LoadingScreen from "./components/LoadingScreen";
 type ScoreValue = number | "X" | null;
 type CompetitionLocalSet = {
   competitionId: string;
-
+  
   competitionType:
-    | "grand_slam_final"
-    | "world_cup"
-    | "grand_prix";
-
+  | "grand_slam_final"
+  | "world_cup"
+  | "basket"
+  | "grand_prix";
+  
   matchId: string | null;
-
+  basketMatchId: string | null;
   grandPrixId: string | null;
   circuitId: string | null;
-
+  
   matchNumber: number;
   gameId: string;
   roundNumber: number;
-
+  
   isWorldCupSemiFinal: boolean;
   isWorldCupFinal: boolean;
-
+  
   theme:
-    | "australian_open"
-    | "roland_garros"
-    | "wimbledon"
-    | "us_open"
-    | "world_cup";
-
+  | "australian_open"
+  | "roland_garros"
+  | "wimbledon"
+  | "us_open"
+  | "world_cup"
+  | "basket";
+  
   tournamentName: string;
-
+  
   player1SetsWon: number;
   player2SetsWon: number;
 };
@@ -67,6 +69,7 @@ type Player = {
   name: string;
   playerOrder?: number;
   linkedUserId: string | null;
+  basketTeam?: "A" | "B" | null;
 };
 
 type Scores = Record<string, Record<string, Record<YamRow, ScoreValue>>>;
@@ -145,7 +148,26 @@ export default function Home() {
   const [showQuitModal, setShowQuitModal] = useState(false);
   const [gameMode, setGameMode] = useState<"6cols" | "3cols">("6cols");
   const [showVictoryModal, setShowVictoryModal] = useState(false);
+  const [
+    showBasketQuarterModal,
+    setShowBasketQuarterModal,
+  ] = useState(false);
+  
+  const [
+    finishedBasketQuarter,
+    setFinishedBasketQuarter,
+  ] = useState<1 | 2 | 3 | null>(null);
   const [scores, setScores] = useState<Scores>({});
+  type ScoreQuarters = Record<
+  string,
+  Record<
+  string,
+  Partial<Record<YamRow, 1 | 2 | 3 | 4>>
+  >
+  >;
+  
+  const [scoreQuarters, setScoreQuarters] =
+  useState<ScoreQuarters>({});
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const [fitOffsetY, setFitOffsetY] = useState(0);
   const [lastScoreAnimation, setLastScoreAnimation] = useState<{
@@ -173,13 +195,15 @@ export default function Home() {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const sheetRef = useRef<HTMLDivElement | null>(null);
   const finishLocalGameStartedRef = useRef(false);
+  const previousBasketQuarterRef =
+  useRef<1 | 2 | 3 | 4 | null>(null);
   const [currentLocalGameId, setCurrentLocalGameId] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState(true);
-const [isSavingScore, setIsSavingScore] = useState(false);
-const [isCheckingConnection, setIsCheckingConnection] = useState(false);
-const [showReconnectedMessage, setShowReconnectedMessage] = useState(false);
-
-const wasOfflineRef = useRef(false);
+  const [isSavingScore, setIsSavingScore] = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(false);
+  const [showReconnectedMessage, setShowReconnectedMessage] = useState(false);
+  
+  const wasOfflineRef = useRef(false);
   const scoreOptions = selectedCell ? getScoreOptions(selectedCell.rowId) : [];
   const useSideLeaderboard = players.length <= 3;
   
@@ -187,21 +211,21 @@ const wasOfflineRef = useRef(false);
   gameMode === "6cols"
   ? columns
   : [columns[0], columns[2], columns[4]];
-
-useEffect(() => {
-  const savedHighContrast =
+  
+  useEffect(() => {
+    const savedHighContrast =
     localStorage.getItem("yam-score-high-contrast") === "true";
-
-  setHighContrast(savedHighContrast);
-}, []);
-
-useEffect(() => {
-  localStorage.setItem(
-    "yam-score-high-contrast",
-    String(highContrast)
-  );
-}, [highContrast]);
-
+    
+    setHighContrast(savedHighContrast);
+  }, []);
+  
+  useEffect(() => {
+    localStorage.setItem(
+      "yam-score-high-contrast",
+      String(highContrast)
+    );
+  }, [highContrast]);
+  
   useEffect(() => {
     setSetupPlayerNames((current) =>
       Array.from({ length: playerCount }, (_, index) => {
@@ -219,9 +243,9 @@ function isNetworkError(error: unknown) {
   if (!(error instanceof Error)) {
     return false;
   }
-
+  
   const message = error.message.toLowerCase();
-
+  
   return (
     message.includes("failed to fetch") ||
     message.includes("networkerror") ||
@@ -237,37 +261,37 @@ useEffect(() => {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
-
+      
       if (
-  authError &&
-  authError.name !== "AuthSessionMissingError"
-) {
-  throw authError;
-}
-
+        authError &&
+        authError.name !== "AuthSessionMissingError"
+      ) {
+        throw authError;
+      }
+      
       if (!user) {
         setCurrentUserId(null);
         setCurrentUsername(null);
         setHomeStats(null);
         return;
       }
-
+      
       setCurrentUserId(user.id);
-
+      
       const [
         { data: profile, error: profileError },
         { data: stats, error: statsError },
         { data: recentGames, error: recentGamesError },
       ] = await Promise.all([
         supabase
-          .from("profiles")
-          .select("username")
-          .eq("id", user.id)
-          .single(),
-
+        .from("profiles")
+        .select("username")
+        .eq("id", user.id)
+        .single(),
+        
         supabase
-          .from("profile_stats")
-          .select(`
+        .from("profile_stats")
+        .select(`
             games_played_3,
             games_played_6,
             wins_3,
@@ -280,8 +304,8 @@ useEffect(() => {
           `)
           .eq("profile_id", user.id)
           .maybeSingle(),
-
-        supabase
+          
+          supabase
           .from("local_game_players")
           .select(`
             final_rank,
@@ -292,119 +316,120 @@ useEffect(() => {
               finished_at
             )
           `)
-          .eq("profile_id", user.id)
-          .eq("local_games.status", "finished")
-          .gte("local_games.player_count", 2)
-          .not("final_rank", "is", null),
-      ]);
-
-      if (profileError) {
-        console.error("Erreur chargement profil :", profileError);
-      }
-
-      if (statsError) {
-        console.error("Erreur chargement statistiques :", statsError);
-      }
-
-      if (recentGamesError) {
-        console.error(
-          "Erreur chargement série actuelle :",
-          recentGamesError
-        );
-      }
-
-      setCurrentUsername(profile?.username ?? null);
-
-      const gamesPlayed =
-        (stats?.games_played_3 ?? 0) +
-        (stats?.games_played_6 ?? 0);
-
-      const multiplayerGames =
-        (stats?.games_2_players ?? 0) +
-        (stats?.games_3_players ?? 0) +
-        (stats?.games_4_players ?? 0) +
-        (stats?.games_5_players ?? 0) +
-        (stats?.games_6_players ?? 0);
-
-      const multiplayerWins =
-        (stats?.wins_3 ?? 0) +
-        (stats?.wins_6 ?? 0);
-
-      const sortedRecentGames = [...(recentGames ?? [])].sort((a, b) => {
-        const gameA = Array.isArray(a.local_games)
-          ? a.local_games[0]
-          : a.local_games;
-
-        const gameB = Array.isArray(b.local_games)
-          ? b.local_games[0]
-          : b.local_games;
-
-        const dateA = new Date(
-          gameA?.finished_at ?? gameA?.created_at ?? 0
-        ).getTime();
-
-        const dateB = new Date(
-          gameB?.finished_at ?? gameB?.created_at ?? 0
-        ).getTime();
-
-        return dateB - dateA;
-      });
-
-      let currentWinStreak = 0;
-
-      for (const game of sortedRecentGames) {
-        if (game.final_rank !== 1) {
-          break;
-        }
-
-        currentWinStreak += 1;
-      }
-
-      setHomeStats({
-        gamesPlayed,
-        winRate:
-          multiplayerGames > 0
+            .eq("profile_id", user.id)
+            .eq("local_games.status", "finished")
+            .gte("local_games.player_count", 2)
+            .not("final_rank", "is", null),
+          ]);
+          
+          if (profileError) {
+            console.error("Erreur chargement profil :", profileError);
+          }
+          
+          if (statsError) {
+            console.error("Erreur chargement statistiques :", statsError);
+          }
+          
+          if (recentGamesError) {
+            console.error(
+              "Erreur chargement série actuelle :",
+              recentGamesError
+            );
+          }
+          
+          setCurrentUsername(profile?.username ?? null);
+          
+          const gamesPlayed =
+          (stats?.games_played_3 ?? 0) +
+          (stats?.games_played_6 ?? 0);
+          
+          const multiplayerGames =
+          (stats?.games_2_players ?? 0) +
+          (stats?.games_3_players ?? 0) +
+          (stats?.games_4_players ?? 0) +
+          (stats?.games_5_players ?? 0) +
+          (stats?.games_6_players ?? 0);
+          
+          const multiplayerWins =
+          (stats?.wins_3 ?? 0) +
+          (stats?.wins_6 ?? 0);
+          
+          const sortedRecentGames = [...(recentGames ?? [])].sort((a, b) => {
+            const gameA = Array.isArray(a.local_games)
+            ? a.local_games[0]
+            : a.local_games;
+            
+            const gameB = Array.isArray(b.local_games)
+            ? b.local_games[0]
+            : b.local_games;
+            
+            const dateA = new Date(
+              gameA?.finished_at ?? gameA?.created_at ?? 0
+            ).getTime();
+            
+            const dateB = new Date(
+              gameB?.finished_at ?? gameB?.created_at ?? 0
+            ).getTime();
+            
+            return dateB - dateA;
+          });
+          
+          let currentWinStreak = 0;
+          
+          for (const game of sortedRecentGames) {
+            if (game.final_rank !== 1) {
+              break;
+            }
+            
+            currentWinStreak += 1;
+          }
+          
+          setHomeStats({
+            gamesPlayed,
+            winRate:
+            multiplayerGames > 0
             ? Math.round((multiplayerWins / multiplayerGames) * 100)
             : 0,
-        currentWinStreak,
-      });
-    } catch (error) {
-      if (isNetworkError(error) || !navigator.onLine) {
-        markConnectionLost();
-        return;
+            currentWinStreak,
+          });
+        } catch (error) {
+          if (isNetworkError(error) || !navigator.onLine) {
+            markConnectionLost();
+            return;
+          }
+          
+          console.error("Erreur chargement utilisateur :", error);
+        }
       }
-
-      console.error("Erreur chargement utilisateur :", error);
-    }
-  }
-
-  void loadCurrentUser();
-
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(() => {
-    void loadCurrentUser();
-  });
-
-  return () => {
-    subscription.unsubscribe();
-  };
-}, []);
-  useEffect(() => {
-    async function loadCompetitionLocalSet() {
-      const searchParams = new URLSearchParams(window.location.search);
       
-      const competitionId = searchParams.get("competitionId");
-      const gameId = searchParams.get("gameId");
-     const grandPrixId = searchParams.get("grandPrixId"); 
-      if (!competitionId || !gameId) return;
+      void loadCurrentUser();
       
-      setIsLoadingCompetitionSet(true);
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange(() => {
+        void loadCurrentUser();
+      });
       
-      const { data: game, error: gameError } = await supabase
-      .from("local_games")
-      .select(
-        `
+      return () => {
+        subscription.unsubscribe();
+      };
+    }, []);
+    useEffect(() => {
+      async function loadCompetitionLocalSet() {
+        const searchParams = new URLSearchParams(window.location.search);
+        
+        const competitionId = searchParams.get("competitionId");
+        const gameId = searchParams.get("gameId");
+        const grandPrixId = searchParams.get("grandPrixId"); 
+        const basketMatchId = searchParams.get("basketMatchId");
+        if (!competitionId || !gameId) return;
+        
+        setIsLoadingCompetitionSet(true);
+        
+        const { data: game, error: gameError } = await supabase
+        .from("local_games")
+        .select(
+          `
         id,
         mode,
         player_count,
@@ -412,126 +437,126 @@ useEffect(() => {
         competition_id,
         competition_round_number
         `
-      )
-      .eq("id", gameId)
-      .eq("competition_id", competitionId)
-      .single();
-      
-      if (gameError || !game) {
-        console.error("Erreur chargement set local", {
-          message: gameError?.message,
-          details: gameError?.details,
-          hint: gameError?.hint,
-          code: gameError?.code,
-        });
+        )
+        .eq("id", gameId)
+        .eq("competition_id", competitionId)
+        .single();
         
-        alert("Impossible de charger ce set de compétition.");
-        setIsLoadingCompetitionSet(false);
-        return;
-      }
-      
-      const { data: gamePlayers, error: playersError } = await supabase
-      .from("local_game_players")
-      .select(
-        `
+        if (gameError || !game) {
+          console.error("Erreur chargement set local", {
+            message: gameError?.message,
+            details: gameError?.details,
+            hint: gameError?.hint,
+            code: gameError?.code,
+          });
+          
+          alert("Impossible de charger ce set de compétition.");
+          setIsLoadingCompetitionSet(false);
+          return;
+        }
+        
+        const { data: gamePlayers, error: playersError } = await supabase
+        .from("local_game_players")
+        .select(
+          `
     player_key,
     display_name,
     profile_id,
     player_order,
     competition_player_id
   `
-      )
-      .eq("game_id", gameId)
-      .order("player_order", { ascending: true });
-      
-      if (
-  playersError ||
-  !gamePlayers ||
-  gamePlayers.length !== game.player_count
-) {
-  console.error("Erreur chargement joueurs de la partie de compétition", {
-    error: playersError,
-    expectedPlayerCount: game.player_count,
-    loadedPlayerCount: gamePlayers?.length ?? 0,
-    gameId,
-    competitionId,
-  });
-
-  alert(
-    `Impossible de charger les joueurs de cette partie ` +
-      `(${gamePlayers?.length ?? 0}/${game.player_count}).`
-  );
-
-  setIsLoadingCompetitionSet(false);
-  return;
-}
-      const { data: competition, error: competitionError } =
-      await supabase
-      .from("competitions")
-      .select("competition_type, theme")
-      .eq("id", competitionId)
-      .single();
-      
-      if (competitionError || !competition) {
-        console.error("Erreur chargement compétition", {
-          message: competitionError?.message,
-          details: competitionError?.details,
-          hint: competitionError?.hint,
-          code: competitionError?.code,
-        });
+        )
+        .eq("game_id", gameId)
+        .order("player_order", { ascending: true });
         
-        alert("Impossible de charger les informations de la compétition.");
-        setIsLoadingCompetitionSet(false);
-        return;
-      }
-      let circuitId: string | null = null;
-
-if (competition.competition_type === "grand_prix") {
-  if (!grandPrixId) {
-    console.error("grandPrixId manquant dans l’URL");
-
-    alert("Impossible de retrouver le Grand Prix.");
-
-    setIsLoadingCompetitionSet(false);
-    return;
-  }
-
-  const {
-    data: grandPrix,
-    error: grandPrixError,
-  } = await supabase
-    .from("competition_grand_prix")
-    .select("circuit_id")
-    .eq("id", grandPrixId)
-    .eq("competition_id", competitionId)
-    .maybeSingle();
-
-  if (grandPrixError || !grandPrix) {
-    console.error(
-      "Erreur chargement du circuit Grand Prix",
-      grandPrixError
-    );
-
-    alert("Impossible de charger le circuit du Grand Prix.");
-
-    setIsLoadingCompetitionSet(false);
-    return;
-  }
-
-  circuitId = grandPrix.circuit_id;
-}
-      const competitionPlayerIds = gamePlayers
-      .map((player) => player.competition_player_id)
-      .filter(
-        (id): id is string => Boolean(id)
-      );
-      
-      const {
-        data: competitionPlayers,
-        error: competitionPlayersError,
-      } = await supabase
-      .from("competition_players")
-      .select(`
+        if (
+          playersError ||
+          !gamePlayers ||
+          gamePlayers.length !== game.player_count
+        ) {
+          console.error("Erreur chargement joueurs de la partie de compétition", {
+            error: playersError,
+            expectedPlayerCount: game.player_count,
+            loadedPlayerCount: gamePlayers?.length ?? 0,
+            gameId,
+            competitionId,
+          });
+          
+          alert(
+            `Impossible de charger les joueurs de cette partie ` +
+            `(${gamePlayers?.length ?? 0}/${game.player_count}).`
+          );
+          
+          setIsLoadingCompetitionSet(false);
+          return;
+        }
+        const { data: competition, error: competitionError } =
+        await supabase
+        .from("competitions")
+        .select("competition_type, theme")
+        .eq("id", competitionId)
+        .single();
+        
+        if (competitionError || !competition) {
+          console.error("Erreur chargement compétition", {
+            message: competitionError?.message,
+            details: competitionError?.details,
+            hint: competitionError?.hint,
+            code: competitionError?.code,
+          });
+          
+          alert("Impossible de charger les informations de la compétition.");
+          setIsLoadingCompetitionSet(false);
+          return;
+        }
+        let circuitId: string | null = null;
+        
+        if (competition.competition_type === "grand_prix") {
+          if (!grandPrixId) {
+            console.error("grandPrixId manquant dans l’URL");
+            
+            alert("Impossible de retrouver le Grand Prix.");
+            
+            setIsLoadingCompetitionSet(false);
+            return;
+          }
+          
+          const {
+            data: grandPrix,
+            error: grandPrixError,
+          } = await supabase
+          .from("competition_grand_prix")
+          .select("circuit_id")
+          .eq("id", grandPrixId)
+          .eq("competition_id", competitionId)
+          .maybeSingle();
+          
+          if (grandPrixError || !grandPrix) {
+            console.error(
+              "Erreur chargement du circuit Grand Prix",
+              grandPrixError
+            );
+            
+            alert("Impossible de charger le circuit du Grand Prix.");
+            
+            setIsLoadingCompetitionSet(false);
+            return;
+          }
+          
+          circuitId = grandPrix.circuit_id;
+        }
+        const competitionPlayerIds = gamePlayers
+        .map((player) => player.competition_player_id)
+        .filter(
+          (id): id is string => Boolean(id)
+        );
+        
+        const {
+          data: competitionPlayers,
+          error: competitionPlayersError,
+        } = await supabase
+        .from("competition_players")
+        .select(`
   id,
   player_order,
   player_key,
@@ -540,800 +565,860 @@ if (competition.competition_type === "grand_prix") {
   avatar_url,
   sets_won
 `)
-      .eq("competition_id", competitionId)
-      .in("id", competitionPlayerIds);
-      
-      if (
-  competitionPlayersError ||
-  !competitionPlayers ||
-  competitionPlayers.length !== game.player_count
-) {
-  console.error(
-    "Erreur chargement des participants de la compétition",
-    {
-      error: competitionPlayersError,
-      competitionPlayerIds,
-      expectedPlayerCount: game.player_count,
-      loadedPlayerCount: competitionPlayers?.length ?? 0,
-      competitionType: competition.competition_type,
-    }
-  );
-
-  alert(
-    `Impossible de charger les participants de la compétition ` +
-      `(${competitionPlayers?.length ?? 0}/${game.player_count}).`
-  );
-
-  setIsLoadingCompetitionSet(false);
-  return;
-}
-if (competition.competition_type === "grand_prix") {
-  const { data: finishedGrandPrix, error: finishedGrandPrixError } =
-    await supabase
-      .from("competition_grand_prix")
-      .select("id")
-      .eq("competition_id", competitionId)
-      .eq("status", "finished");
-
-  if (finishedGrandPrixError) {
-    console.error(
-      "Erreur chargement des Grand Prix terminés :",
-      finishedGrandPrixError
-    );
-  } else {
-    const finishedGrandPrixIds = (finishedGrandPrix ?? []).map(
-      (grandPrix) => grandPrix.id
-    );
-
-    if (finishedGrandPrixIds.length === 0) {
-      setGrandPrixPointsByPlayer({});
-    } else {
-      const {
-        data: previousResults,
-        error: previousResultsError,
-      } = await supabase
-        .from("competition_grand_prix_results")
-        .select("competition_player_id, points_awarded")
-        .in("grand_prix_id", finishedGrandPrixIds);
-
-      if (previousResultsError) {
-        console.error(
-          "Erreur chargement des points championnat :",
-          previousResultsError
-        );
-      } else {
-        const playerKeyByCompetitionPlayerId =
-          new Map(
-            competitionPlayers.map((player) => [
-              player.id,
-              player.player_key,
-            ])
-          );
-
-        const pointsByPlayerKey: Record<string, number> = {};
-
-        for (const result of previousResults ?? []) {
-          const playerKey =
-            playerKeyByCompetitionPlayerId.get(
-              result.competition_player_id
+          .eq("competition_id", competitionId)
+          .in("id", competitionPlayerIds);
+          
+          if (
+            competitionPlayersError ||
+            !competitionPlayers ||
+            competitionPlayers.length !== game.player_count
+          ) {
+            console.error(
+              "Erreur chargement des participants de la compétition",
+              {
+                error: competitionPlayersError,
+                competitionPlayerIds,
+                expectedPlayerCount: game.player_count,
+                loadedPlayerCount: competitionPlayers?.length ?? 0,
+                competitionType: competition.competition_type,
+              }
             );
-
-          if (!playerKey) continue;
-
-          pointsByPlayerKey[playerKey] =
-            (pointsByPlayerKey[playerKey] ?? 0) +
-            result.points_awarded;
-        }
-
-        setGrandPrixPointsByPlayer(pointsByPlayerKey);
-      }
-    }
-  }
-} else {
-  setGrandPrixPointsByPlayer({});
-}
-      const { data: savedScores, error: scoresError } = await supabase
-      .from("local_game_scores")
-      .select("player_key, column_id, row_id, value")
-      .eq("game_id", gameId);
-      
-      if (scoresError) {
-        console.error("Erreur chargement scores du set", scoresError);
-        setIsLoadingCompetitionSet(false);
-        return;
-      }
-      
-      const loadedPlayers: Player[] = gamePlayers.map((player) => ({
-        id: player.player_key,
-        name: player.display_name,
-        playerOrder: player.player_order,
-        linkedUserId: player.profile_id,
-      }));
-      
-      const loadedScores: Scores = {};
-      
-      for (const score of savedScores ?? []) {
-        const value: ScoreValue =
-        score.value === "X" ? "X" : Number(score.value);
-        
-        loadedScores[score.player_key] = {
-          ...loadedScores[score.player_key],
-          [score.column_id]: {
-            ...loadedScores[score.player_key]?.[score.column_id],
-            [score.row_id as YamRow]: value,
-          },
-        };
-      }
-      const setPlayer1CompetitionId =
-      gamePlayers.find((player) => player.player_order === 1)
-      ?.competition_player_id ?? null;
-      
-      const setPlayer2CompetitionId =
-      gamePlayers.find((player) => player.player_order === 2)
-      ?.competition_player_id ?? null;
-      
-      const setPlayer1Competition = competitionPlayers.find(
-        (player) => player.id === setPlayer1CompetitionId
-      );
-      
-      const setPlayer2Competition = competitionPlayers.find(
-        (player) => player.id === setPlayer2CompetitionId
-      );
-      const matchId = searchParams.get("matchId");
-      
-      let worldCupRoundNumber =
-      game.competition_round_number;
-      
-      let worldCupMatchNumber = 1;
-      
-      let isWorldCupSemiFinal = false;
-      let isWorldCupFinal = false;
-      
-      if (
-        competition.competition_type === "world_cup" &&
-        matchId
-      ) {
-        const {
-          data: worldCupMatch,
-          error: worldCupMatchError,
-        } = await supabase
-        .from("competition_matches")
-        .select(
-          "round_number, match_number, next_match_id"
-        )
-        .eq("id", matchId)
-        .single();
-        
-        if (worldCupMatchError || !worldCupMatch) {
-          console.error(
-            "Erreur chargement des informations du match",
-            worldCupMatchError
-          );
-        } else {
-          worldCupRoundNumber =
-          worldCupMatch.round_number;
-          
-          worldCupMatchNumber =
-          worldCupMatch.match_number;
-          
-          // Aucun match après celui-ci : c'est la finale.
-          isWorldCupFinal =
-          worldCupMatch.next_match_id === null;
-          
-          // Il existe un prochain match :
-          // on vérifie si ce prochain match est la finale.
-          if (worldCupMatch.next_match_id) {
-            const {
-              data: nextWorldCupMatch,
-              error: nextWorldCupMatchError,
-            } = await supabase
-            .from("competition_matches")
-            .select("next_match_id")
-            .eq("id", worldCupMatch.next_match_id)
-            .single();
             
-            if (nextWorldCupMatchError) {
+            alert(
+              `Impossible de charger les participants de la compétition ` +
+              `(${competitionPlayers?.length ?? 0}/${game.player_count}).`
+            );
+            
+            setIsLoadingCompetitionSet(false);
+            return;
+          }
+          if (competition.competition_type === "grand_prix") {
+            const { data: finishedGrandPrix, error: finishedGrandPrixError } =
+            await supabase
+            .from("competition_grand_prix")
+            .select("id")
+            .eq("competition_id", competitionId)
+            .eq("status", "finished");
+            
+            if (finishedGrandPrixError) {
               console.error(
-                "Erreur chargement du prochain match",
-                nextWorldCupMatchError
+                "Erreur chargement des Grand Prix terminés :",
+                finishedGrandPrixError
               );
             } else {
-              isWorldCupSemiFinal =
-              nextWorldCupMatch?.next_match_id === null;
+              const finishedGrandPrixIds = (finishedGrandPrix ?? []).map(
+                (grandPrix) => grandPrix.id
+              );
+              
+              if (finishedGrandPrixIds.length === 0) {
+                setGrandPrixPointsByPlayer({});
+              } else {
+                const {
+                  data: previousResults,
+                  error: previousResultsError,
+                } = await supabase
+                .from("competition_grand_prix_results")
+                .select("competition_player_id, points_awarded")
+                .in("grand_prix_id", finishedGrandPrixIds);
+                
+                if (previousResultsError) {
+                  console.error(
+                    "Erreur chargement des points championnat :",
+                    previousResultsError
+                  );
+                } else {
+                  const playerKeyByCompetitionPlayerId =
+                  new Map(
+                    competitionPlayers.map((player) => [
+                      player.id,
+                      player.player_key,
+                    ])
+                  );
+                  
+                  const pointsByPlayerKey: Record<string, number> = {};
+                  
+                  for (const result of previousResults ?? []) {
+                    const playerKey =
+                    playerKeyByCompetitionPlayerId.get(
+                      result.competition_player_id
+                    );
+                    
+                    if (!playerKey) continue;
+                    
+                    pointsByPlayerKey[playerKey] =
+                    (pointsByPlayerKey[playerKey] ?? 0) +
+                    result.points_awarded;
+                  }
+                  
+                  setGrandPrixPointsByPlayer(pointsByPlayerKey);
+                }
+              }
+            }
+          } else {
+            setGrandPrixPointsByPlayer({});
+          }
+          const { data: savedScores, error: scoresError } = await supabase
+          .from("local_game_scores")
+          .select(
+            "player_key, column_id, row_id, value, basket_quarter"
+          )
+          .eq("game_id", gameId);
+          
+          if (scoresError) {
+            console.error("Erreur chargement scores du set", scoresError);
+            setIsLoadingCompetitionSet(false);
+            return;
+          }
+          let basketTeamByCompetitionPlayerId = new Map<
+          string,
+          "A" | "B"
+          >();
+          
+          if (competition.competition_type === "basket") {
+            const {
+              data: basketPlayers,
+              error: basketPlayersError,
+            } = await supabase
+            .from("competition_basket_players")
+            .select("competition_player_id, team")
+            .eq("competition_id", competitionId);
+            
+            if (basketPlayersError) {
+              console.error(
+                "Erreur chargement équipes Basket",
+                basketPlayersError
+              );
+            } else {
+              basketTeamByCompetitionPlayerId = new Map(
+                (basketPlayers ?? []).map((basketPlayer) => [
+                  basketPlayer.competition_player_id,
+                  basketPlayer.team as "A" | "B",
+                ])
+              );
             }
           }
+          const loadedPlayers: Player[] = gamePlayers.map((player) => ({
+            id: player.player_key,
+            name: player.display_name,
+            playerOrder: player.player_order,
+            linkedUserId: player.profile_id,
+            
+            basketTeam:
+            competition.competition_type === "basket" &&
+            player.competition_player_id
+            ? basketTeamByCompetitionPlayerId.get(
+              player.competition_player_id
+            ) ?? null
+            : null,
+          }));
+          const loadedScores: Scores = {};
+          const loadedScoreQuarters: ScoreQuarters = {};
+          for (const score of savedScores ?? []) {
+            const value: ScoreValue =
+            score.value === "X" ? "X" : Number(score.value);
+            
+            loadedScores[score.player_key] = {
+              ...loadedScores[score.player_key],
+              [score.column_id]: {
+                ...loadedScores[score.player_key]?.[score.column_id],
+                [score.row_id as YamRow]: value,
+              },
+            };
+            if (
+              score.basket_quarter &&
+              score.basket_quarter >= 1 &&
+              score.basket_quarter <= 4
+            ) {
+              loadedScoreQuarters[score.player_key] = {
+                ...loadedScoreQuarters[score.player_key],
+                
+                [score.column_id]: {
+                  ...loadedScoreQuarters[score.player_key]?.[
+                    score.column_id
+                  ],
+                  
+                  [score.row_id as YamRow]:
+                  score.basket_quarter as 1 | 2 | 3 | 4,
+                },
+              };
+            }
+          }
+          const setPlayer1CompetitionId =
+          gamePlayers.find((player) => player.player_order === 1)
+          ?.competition_player_id ?? null;
+          
+          const setPlayer2CompetitionId =
+          gamePlayers.find((player) => player.player_order === 2)
+          ?.competition_player_id ?? null;
+          
+          const setPlayer1Competition = competitionPlayers.find(
+            (player) => player.id === setPlayer1CompetitionId
+          );
+          
+          const setPlayer2Competition = competitionPlayers.find(
+            (player) => player.id === setPlayer2CompetitionId
+          );
+          const matchId = searchParams.get("matchId");
+          
+          let worldCupRoundNumber =
+          game.competition_round_number;
+          
+          let worldCupMatchNumber = 1;
+          
+          let isWorldCupSemiFinal = false;
+          let isWorldCupFinal = false;
+          
+          if (
+            competition.competition_type === "world_cup" &&
+            matchId
+          ) {
+            const {
+              data: worldCupMatch,
+              error: worldCupMatchError,
+            } = await supabase
+            .from("competition_matches")
+            .select(
+              "round_number, match_number, next_match_id"
+            )
+            .eq("id", matchId)
+            .single();
+            
+            if (worldCupMatchError || !worldCupMatch) {
+              console.error(
+                "Erreur chargement des informations du match",
+                worldCupMatchError
+              );
+            } else {
+              worldCupRoundNumber =
+              worldCupMatch.round_number;
+              
+              worldCupMatchNumber =
+              worldCupMatch.match_number;
+              
+              // Aucun match après celui-ci : c'est la finale.
+              isWorldCupFinal =
+              worldCupMatch.next_match_id === null;
+              
+              // Il existe un prochain match :
+              // on vérifie si ce prochain match est la finale.
+              if (worldCupMatch.next_match_id) {
+                const {
+                  data: nextWorldCupMatch,
+                  error: nextWorldCupMatchError,
+                } = await supabase
+                .from("competition_matches")
+                .select("next_match_id")
+                .eq("id", worldCupMatch.next_match_id)
+                .single();
+                
+                if (nextWorldCupMatchError) {
+                  console.error(
+                    "Erreur chargement du prochain match",
+                    nextWorldCupMatchError
+                  );
+                } else {
+                  isWorldCupSemiFinal =
+                  nextWorldCupMatch?.next_match_id === null;
+                }
+              }
+            }
+          }
+          setCompetitionLocalSet({
+            competitionId,
+            
+            competitionType:
+            competition.competition_type as
+            | "grand_slam_final"
+            | "world_cup"
+            | "grand_prix"
+            | "basket",
+            
+            matchId,
+            basketMatchId,
+            
+            grandPrixId,
+            circuitId,
+            
+            isWorldCupSemiFinal,
+            isWorldCupFinal,
+            
+            matchNumber: worldCupMatchNumber,
+            
+            gameId,
+            
+            roundNumber:
+            competition.competition_type === "world_cup"
+            ? worldCupRoundNumber
+            : game.competition_round_number,
+            
+            theme: competition.theme,
+            
+            tournamentName:
+            competition.competition_type === "world_cup"
+            ? "Coupe du Monde"
+            : competition.competition_type === "grand_prix"
+            ? "Saison Grand Prix"
+            : competition.competition_type === "basket"
+            ? "Basket"
+            : getTournamentName(competition.theme),
+            
+            player1SetsWon:
+            competition.competition_type === "grand_slam_final"
+            ? setPlayer1Competition?.sets_won ?? 0
+            : 0,
+            
+            player2SetsWon:
+            competition.competition_type === "grand_slam_final"
+            ? setPlayer2Competition?.sets_won ?? 0
+            : 0,
+          });
+          setCurrentLocalGameId(gameId);
+          setPartyMode("local");
+          setPlayerCount(game.player_count);
+          
+          setGameMode(
+            game.mode === "6" || game.mode === "6cols"
+            ? "6cols"
+            : "3cols"
+          );
+          setPlayers(loadedPlayers);
+          setScores(loadedScores);
+          setScoreQuarters(loadedScoreQuarters);
+          setFinishedGameSaved(false);
+          setHasSavedGame(false);
+          setScreen("game");
+          setIsLoadingCompetitionSet(false);
         }
+        
+        void loadCompetitionLocalSet();
+      }, []);
+      useEffect(() => {
+        updateSavedGameInfo();
+      }, []);
+      useEffect(() => {
+        setIsOnline(navigator.onLine);
+        
+        function handleOffline() {
+          wasOfflineRef.current = true;
+          setIsOnline(false);
+          setShowReconnectedMessage(false);
+        }
+        
+        function handleOnline() {
+          setIsOnline(true);
+          
+          if (wasOfflineRef.current) {
+            setShowReconnectedMessage(true);
+            wasOfflineRef.current = false;
+            
+            window.setTimeout(() => {
+              setShowReconnectedMessage(false);
+            }, 3000);
+          }
+        }
+        
+        window.addEventListener("offline", handleOffline);
+        window.addEventListener("online", handleOnline);
+        
+        return () => {
+          window.removeEventListener("offline", handleOffline);
+          window.removeEventListener("online", handleOnline);
+        };
+      }, []);
+      async function createPlayerLinkToken(playerKey: string) {
+        if (!currentUserId) {
+          alert("Tu dois être connecté pour ajouter un autre profil.");
+          return;
+        }
+        
+        const token = crypto.randomUUID();
+        
+        const expiresAt = new Date();
+        expiresAt.setMinutes(expiresAt.getMinutes() + 15);
+        
+        const { error } = await supabase.from("player_link_tokens").insert({
+          token,
+          host_user_id: currentUserId,
+          target_player_key: playerKey,
+          status: "pending",
+          player_count: playerCount,
+          expires_at: expiresAt.toISOString(),
+        });
+        
+        if (error) {
+          alert(error.message);
+          return;
+        }
+        
+        setLinkToken(token);
+        setLinkUrl(`${window.location.origin}/link-player/${token}`);
       }
-      setCompetitionLocalSet({
-        competitionId,
+      function applyClaimedProfileToSetup({
+        playerKey,
+        userId,
+        username,
+        avatarUrl,
+      }: {
+        playerKey: string;
+        userId: string;
+        username: string;
+        avatarUrl?: string | null;
+      }) {
+        const playerIndex = Number(playerKey.replace("player-", "")) - 1;
         
-        competitionType:
-        competition.competition_type as
-  | "grand_slam_final"
-  | "world_cup"
-  | "grand_prix",
+        setLinkedProfiles((current) => {
+          // Si la place est déjà prise par un autre profil, on ne remplace pas
+          if (current[playerKey] && current[playerKey].userId !== userId) {
+            console.log("Place déjà prise, association ignorée :", playerKey);
+            return current;
+          }
+          
+          return {
+            ...current,
+            [playerKey]: {
+              userId,
+              username,
+              avatarUrl,
+            },
+          };
+        });
         
-        matchId,
-
-grandPrixId,
-circuitId,
-
-isWorldCupSemiFinal,
-isWorldCupFinal,
-        matchNumber: worldCupMatchNumber,
-        
-        gameId,
-        
-        roundNumber:
-        competition.competition_type === "world_cup"
-        ? worldCupRoundNumber
-        : game.competition_round_number,
-        
-        theme: competition.theme,
-        
-        tournamentName:
-  competition.competition_type === "world_cup"
-    ? "Coupe du Monde"
-    : competition.competition_type === "grand_prix"
-      ? "Saison Grand Prix"
-      : getTournamentName(competition.theme),
-        
-        player1SetsWon:
-        competition.competition_type === "grand_slam_final"
-        ? setPlayer1Competition?.sets_won ?? 0
-        : 0,
-        
-        player2SetsWon:
-        competition.competition_type === "grand_slam_final"
-        ? setPlayer2Competition?.sets_won ?? 0
-        : 0,
-      });
-      setCurrentLocalGameId(gameId);
-      setPartyMode("local");
-      setPlayerCount(game.player_count);
-
-setGameMode(
-  game.mode === "6" || game.mode === "6cols"
-    ? "6cols"
-    : "3cols"
-);
-      setPlayers(loadedPlayers);
-      setScores(loadedScores);
-      setFinishedGameSaved(false);
-      setHasSavedGame(false);
-      setScreen("game");
-      setIsLoadingCompetitionSet(false);
+        setSetupPlayerNames((current) =>
+          Array.from({ length: playerCount }, (_, index) => {
+          if (index === playerIndex) {
+            return username.charAt(0).toUpperCase() + username.slice(1);
+          }
+          
+          return current[index] ?? `Joueur ${index + 1}`;
+        })
+      );
     }
-    
-    void loadCompetitionLocalSet();
-  }, []);
-  useEffect(() => {
-    updateSavedGameInfo();
-  }, []);
-  useEffect(() => {
-  setIsOnline(navigator.onLine);
-
-  function handleOffline() {
-    wasOfflineRef.current = true;
-    setIsOnline(false);
-    setShowReconnectedMessage(false);
-  }
-
-  function handleOnline() {
-    setIsOnline(true);
-
-    if (wasOfflineRef.current) {
-      setShowReconnectedMessage(true);
-      wasOfflineRef.current = false;
-
-      window.setTimeout(() => {
-        setShowReconnectedMessage(false);
-      }, 3000);
-    }
-  }
-
-  window.addEventListener("offline", handleOffline);
-  window.addEventListener("online", handleOnline);
-
-  return () => {
-    window.removeEventListener("offline", handleOffline);
-    window.removeEventListener("online", handleOnline);
-  };
-}, []);
-  async function createPlayerLinkToken(playerKey: string) {
-    if (!currentUserId) {
-      alert("Tu dois être connecté pour ajouter un autre profil.");
-      return;
-    }
-    
-    const token = crypto.randomUUID();
-    
-    const expiresAt = new Date();
-    expiresAt.setMinutes(expiresAt.getMinutes() + 15);
-    
-    const { error } = await supabase.from("player_link_tokens").insert({
-      token,
-      host_user_id: currentUserId,
-      target_player_key: playerKey,
-      status: "pending",
-      player_count: playerCount,
-      expires_at: expiresAt.toISOString(),
-    });
-    
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    
-    setLinkToken(token);
-    setLinkUrl(`${window.location.origin}/link-player/${token}`);
-  }
-  function applyClaimedProfileToSetup({
-    playerKey,
-    userId,
-    username,
-    avatarUrl,
-  }: {
-    playerKey: string;
-    userId: string;
-    username: string;
-    avatarUrl?: string | null;
-  }) {
-    const playerIndex = Number(playerKey.replace("player-", "")) - 1;
-    
-    setLinkedProfiles((current) => {
-      // Si la place est déjà prise par un autre profil, on ne remplace pas
-      if (current[playerKey] && current[playerKey].userId !== userId) {
-        console.log("Place déjà prise, association ignorée :", playerKey);
-        return current;
-      }
+    useEffect(() => {
+      if (!linkToken) return;
       
-      return {
-        ...current,
-        [playerKey]: {
-          userId,
-          username,
-          avatarUrl,
+      const channel = supabase
+      .channel(`player_link_token_${linkToken}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "player_link_tokens",
+          filter: `token=eq.${linkToken}`,
         },
-      };
-    });
-    
-    setSetupPlayerNames((current) =>
-      Array.from({ length: playerCount }, (_, index) => {
-      if (index === playerIndex) {
-        return username.charAt(0).toUpperCase() + username.slice(1);
-      }
+        (payload) => {
+          const token = payload.new as {
+            status: string;
+            claimed_player_key: string | null;
+            claimed_user_id: string | null;
+            claimed_username: string | null;
+            claimed_avatar_url: string | null;
+          };
+          
+          if (
+            token.status !== "claimed" ||
+            !token.claimed_player_key ||
+            !token.claimed_user_id ||
+            !token.claimed_username
+          ) {
+            return;
+          }
+          
+          applyClaimedProfileToSetup({
+            playerKey: token.claimed_player_key,
+            userId: token.claimed_user_id,
+            username: token.claimed_username,
+            avatarUrl: token.claimed_avatar_url,
+          });
+          
+          setLinkToken(null);
+          setLinkUrl(null);
+        }
+      )
+      .subscribe((status) => {
+        console.log("Realtime player_link_tokens status:", status);
+      });
       
-      return current[index] ?? `Joueur ${index + 1}`;
-    })
-  );
-}
-useEffect(() => {
-  if (!linkToken) return;
-  
-  const channel = supabase
-  .channel(`player_link_token_${linkToken}`)
-  .on(
-    "postgres_changes",
-    {
-      event: "UPDATE",
-      schema: "public",
-      table: "player_link_tokens",
-      filter: `token=eq.${linkToken}`,
-    },
-    (payload) => {
-      const token = payload.new as {
-        status: string;
-        claimed_player_key: string | null;
-        claimed_user_id: string | null;
-        claimed_username: string | null;
-        claimed_avatar_url: string | null;
+      return () => {
+        supabase.removeChannel(channel);
       };
+    }, [linkToken, playerCount]);
+    function updateSavedGameInfo() {
+      const saved = localStorage.getItem(STORAGE_KEY);
       
-      if (
-        token.status !== "claimed" ||
-        !token.claimed_player_key ||
-        !token.claimed_user_id ||
-        !token.claimed_username
-      ) {
+      if (!saved) {
+        setHasSavedGame(false);
+        setSavedGameInfo(null);
         return;
       }
       
-      applyClaimedProfileToSetup({
-        playerKey: token.claimed_player_key,
-        userId: token.claimed_user_id,
-        username: token.claimed_username,
-        avatarUrl: token.claimed_avatar_url,
+      const data = JSON.parse(saved);
+      const savedPlayerCount = data.players?.length ?? 0;
+      const columnCount = data.gameMode === "6cols" ? 6 : 3;
+      const totalCells = savedPlayerCount * columnCount * 13;
+      
+      const filledCells = Object.values(data.scores ?? {})
+      .flatMap((player: any) => Object.values(player))
+      .flatMap((column: any) => Object.values(column))
+      .filter((value) => value !== null).length;
+      
+      const remainingTurns = Math.ceil(
+        (totalCells - filledCells) / savedPlayerCount
+      );
+      
+      setHasSavedGame(true);
+      setSavedGameInfo({
+        playerCount: savedPlayerCount,
+        mode: data.gameMode === "6cols" ? "6 colonnes" : "3 colonnes",
+        remainingTurns,
+      });
+    }
+    useEffect(() => {
+      function updateLayout() {
+        const viewport = viewportRef.current;
+        const sheet = sheetRef.current;
+        
+        if (!viewport || !sheet) return;
+        
+        if (!fitToScreen) {
+          setFitScale(1);
+          setFitOffsetX(0);
+          setFitOffsetY(0);
+          return;
+        }
+        
+        const contentWidth = sheet.offsetWidth;
+        const contentHeight = sheet.offsetHeight;
+        
+        const availableWidth = viewport.clientWidth;
+        const availableHeight = viewport.clientHeight;
+        
+        if (
+          contentWidth <= 0 ||
+          contentHeight <= 0 ||
+          availableWidth <= 0 ||
+          availableHeight <= 0
+        ) {
+          return;
+        }
+        
+        const scaleX = availableWidth / contentWidth;
+        const scaleY = availableHeight / contentHeight;
+        
+        // Utilise au maximum l'espace disponible sans jamais dépasser.
+        const nextScale = Math.min(scaleX, scaleY);
+        
+        const scaledWidth = contentWidth * nextScale;
+        const scaledHeight = contentHeight * nextScale;
+        
+        const nextOffsetX = Math.max(
+          0,
+          (availableWidth - scaledWidth) / 2
+        );
+        
+        const nextOffsetY = Math.max(
+          0,
+          (availableHeight - scaledHeight) / 2
+        );
+        
+        setFitScale(nextScale);
+        setFitOffsetX(nextOffsetX);
+        setFitOffsetY(nextOffsetY);
+      }
+      
+      const frame = requestAnimationFrame(updateLayout);
+      
+      const resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(updateLayout);
       });
       
-      setLinkToken(null);
-      setLinkUrl(null);
-    }
-  )
-  .subscribe((status) => {
-    console.log("Realtime player_link_tokens status:", status);
-  });
-  
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [linkToken, playerCount]);
-function updateSavedGameInfo() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  
-  if (!saved) {
-    setHasSavedGame(false);
-    setSavedGameInfo(null);
-    return;
-  }
-  
-  const data = JSON.parse(saved);
-  const savedPlayerCount = data.players?.length ?? 0;
-  const columnCount = data.gameMode === "6cols" ? 6 : 3;
-  const totalCells = savedPlayerCount * columnCount * 13;
-  
-  const filledCells = Object.values(data.scores ?? {})
-  .flatMap((player: any) => Object.values(player))
-  .flatMap((column: any) => Object.values(column))
-  .filter((value) => value !== null).length;
-  
-  const remainingTurns = Math.ceil(
-    (totalCells - filledCells) / savedPlayerCount
-  );
-  
-  setHasSavedGame(true);
-  setSavedGameInfo({
-    playerCount: savedPlayerCount,
-    mode: data.gameMode === "6cols" ? "6 colonnes" : "3 colonnes",
-    remainingTurns,
-  });
-}
-useEffect(() => {
-  function updateLayout() {
-    const viewport = viewportRef.current;
-    const sheet = sheetRef.current;
-    
-    if (!viewport || !sheet) return;
-    
-    if (!fitToScreen) {
-      setFitScale(1);
-      setFitOffsetX(0);
-      setFitOffsetY(0);
-      return;
-    }
-    
-    const contentWidth = sheet.offsetWidth;
-    const contentHeight = sheet.offsetHeight;
-    
-    const availableWidth = viewport.clientWidth;
-    const availableHeight = viewport.clientHeight;
-    
-    if (
-      contentWidth <= 0 ||
-      contentHeight <= 0 ||
-      availableWidth <= 0 ||
-      availableHeight <= 0
-    ) {
-      return;
-    }
-    
-    const scaleX = availableWidth / contentWidth;
-    const scaleY = availableHeight / contentHeight;
-    
-    // Utilise au maximum l'espace disponible sans jamais dépasser.
-    const nextScale = Math.min(scaleX, scaleY);
-    
-    const scaledWidth = contentWidth * nextScale;
-    const scaledHeight = contentHeight * nextScale;
-    
-    const nextOffsetX = Math.max(
-      0,
-      (availableWidth - scaledWidth) / 2
-    );
-    
-    const nextOffsetY = Math.max(
-      0,
-      (availableHeight - scaledHeight) / 2
-    );
-    
-    setFitScale(nextScale);
-    setFitOffsetX(nextOffsetX);
-    setFitOffsetY(nextOffsetY);
-  }
-  
-  const frame = requestAnimationFrame(updateLayout);
-  
-  const resizeObserver = new ResizeObserver(() => {
-    requestAnimationFrame(updateLayout);
-  });
-  
-  const viewport = viewportRef.current;
-  const sheet = sheetRef.current;
-  
-  if (viewport) {
-    resizeObserver.observe(viewport);
-  }
-  
-  if (sheet) {
-    resizeObserver.observe(sheet);
-  }
-  
-  window.addEventListener("resize", updateLayout);
-  document.addEventListener("fullscreenchange", updateLayout);
-  
-  return () => {
-    cancelAnimationFrame(frame);
-    resizeObserver.disconnect();
-    window.removeEventListener("resize", updateLayout);
-    document.removeEventListener("fullscreenchange", updateLayout);
-  };
-}, [fitToScreen, players.length, gameMode]);
-useEffect(() => {
-  if (players.length === 0) return;
-  
-  // Les sets de compétition sont déjà sauvegardés dans Supabase.
-  if (competitionLocalSet) {
-    localStorage.removeItem(STORAGE_KEY);
-    return;
-  }
-  
-  localStorage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      players,
-      scores,
-      gameMode,
-    })
-  );
-}, [players, scores, gameMode, competitionLocalSet]);
-useEffect(() => {
-  if (!linkToken) return;
-  
-  const interval = window.setInterval(async () => {
-    const { data, error } = await supabase
-    .from("player_link_tokens")
-    .select(
-      "status, claimed_player_key, claimed_user_id, claimed_username, claimed_avatar_url"
-    )
-    .eq("token", linkToken)
-    .maybeSingle();
-    
-    if (error || !data) return;
-    
-    if (
-      data.status === "claimed" &&
-      data.claimed_player_key &&
-      data.claimed_user_id &&
-      data.claimed_username
-    ) {
-      applyClaimedProfileToSetup({
-        playerKey: data.claimed_player_key,
-        userId: data.claimed_user_id,
-        username: data.claimed_username,
-        avatarUrl: data.claimed_avatar_url,
-      });
+      const viewport = viewportRef.current;
+      const sheet = sheetRef.current;
       
-      setLinkToken(null);
-      setLinkUrl(null);
-    }
-  }, 1000);
-  
-  return () => window.clearInterval(interval);
-}, [linkToken, playerCount]);
-function handleSelectCell(cell: SelectedCell) {
-  if (gameFinished) return;
-
-  // Les modes spéciaux enregistrent chaque coup dans Supabase.
-  if (currentLocalGameId && !isOnline) {
-    return;
-  }
-  const currentValue = getScore(cell.playerId, cell.columnId, cell.rowId);
-  
-  if (
-    currentValue === null &&
-    cell.playerId !== currentPlayerId &&
-    !gameFinished
-  ) {
-    setPendingCell(cell);
-    return;
-  }
-  
-  setSelectedCell(cell);
-}
-function generateSalonCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
-async function createSalon() {
-  setIsCreatingSalon(true);
-  
-  const code = generateSalonCode();
-  
-  const { error } = await supabase
-  .from("yam_games")
-  .insert({
-    code,
-    mode: gameMode,
-    player_count: playerCount,
-    status: "waiting",
-    current_player_order: 1,
-  })
-  .select("id")
-  .single();
-  
-  if (error) {
-    console.error("SUPABASE ERROR", {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-      code: error.code,
-    });
-    
-    alert(error.message);
-    
-    setIsCreatingSalon(false);
-    return;
-  }
-  
-  setIsCreatingSalon(false);
-  router.push(`/salon/${code}`);
-}
-async function loadSalonPlayers() {
-  if (!salonGameId) return;
-  
-  const { data, error } = await supabase
-  .from("yam_players")
-  .select("id, name, player_order")
-  .eq("game_id", salonGameId)
-  .order("player_order", { ascending: true });
-  
-  if (error) {
-    console.error(error);
-    return;
-  }
-  
-  setSalonPlayers(data ?? []);
-}
-function getTournamentName(
-  theme:
-  | "australian_open"
-  | "roland_garros"
-  | "wimbledon"
-  | "us_open"
-) {
-  switch (theme) {
-    case "australian_open":
-    return "Open d’Australie";
-    
-    case "roland_garros":
-    return "Roland-Garros";
-    
-    case "wimbledon":
-    return "Wimbledon";
-    
-    case "us_open":
-    return "US Open";
-  }
-}
-useEffect(() => {
-  if (!salonGameId) return;
-  
-  loadSalonPlayers();
-  
-  const channel = supabase
-  .channel(`yam_players_${salonGameId}`)
-  .on(
-    "postgres_changes",
-    {
-      event: "*",
-      schema: "public",
-      table: "yam_players",
-      filter: `game_id=eq.${salonGameId}`,
-    },
-    () => {
-      loadSalonPlayers();
-    }
-  )
-  .subscribe();
-  
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [salonGameId]);
-useEffect(() => {
-  if (!salonGameId) return;
-  
-  const channel = supabase
-  .channel(`yam_scores_${salonGameId}`)
-  .on(
-    "postgres_changes",
-    {
-      event: "*",
-      schema: "public",
-      table: "yam_scores",
-      filter: `game_id=eq.${salonGameId}`,
-    },
-    (payload) => {
-      const newScore = payload.new as {
-        player_id: string;
-        column_id: string;
-        row_id: YamRow;
-        value: string;
+      if (viewport) {
+        resizeObserver.observe(viewport);
+      }
+      
+      if (sheet) {
+        resizeObserver.observe(sheet);
+      }
+      
+      window.addEventListener("resize", updateLayout);
+      document.addEventListener("fullscreenchange", updateLayout);
+      
+      return () => {
+        cancelAnimationFrame(frame);
+        resizeObserver.disconnect();
+        window.removeEventListener("resize", updateLayout);
+        document.removeEventListener("fullscreenchange", updateLayout);
       };
+    }, [fitToScreen, players.length, gameMode]);
+    useEffect(() => {
+      if (players.length === 0) return;
       
-      setScores((current) => ({
-        ...current,
-        [newScore.player_id]: {
-          ...current[newScore.player_id],
-          [newScore.column_id]: {
-            ...current[newScore.player_id]?.[newScore.column_id],
-            [newScore.row_id]:
-            newScore.value === "X" ? "X" : Number(newScore.value),
-          },
-        },
-      }));
+      // Les sets de compétition sont déjà sauvegardés dans Supabase.
+      if (competitionLocalSet) {
+        localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          players,
+          scores,
+          gameMode,
+        })
+      );
+    }, [players, scores, gameMode, competitionLocalSet]);
+    useEffect(() => {
+      if (!linkToken) return;
+      
+      const interval = window.setInterval(async () => {
+        const { data, error } = await supabase
+        .from("player_link_tokens")
+        .select(
+          "status, claimed_player_key, claimed_user_id, claimed_username, claimed_avatar_url"
+        )
+        .eq("token", linkToken)
+        .maybeSingle();
+        
+        if (error || !data) return;
+        
+        if (
+          data.status === "claimed" &&
+          data.claimed_player_key &&
+          data.claimed_user_id &&
+          data.claimed_username
+        ) {
+          applyClaimedProfileToSetup({
+            playerKey: data.claimed_player_key,
+            userId: data.claimed_user_id,
+            username: data.claimed_username,
+            avatarUrl: data.claimed_avatar_url,
+          });
+          
+          setLinkToken(null);
+          setLinkUrl(null);
+        }
+      }, 1000);
+      
+      return () => window.clearInterval(interval);
+    }, [linkToken, playerCount]);
+    function handleSelectCell(cell: SelectedCell) {
+      if (gameFinished) return;
+      
+      // Les modes spéciaux enregistrent chaque coup dans Supabase.
+      if (currentLocalGameId && !isOnline) {
+        return;
+      }
+      const currentValue = getScore(cell.playerId, cell.columnId, cell.rowId);
+      
+      if (
+        currentValue === null &&
+        cell.playerId !== currentPlayerId &&
+        !gameFinished
+      ) {
+        setPendingCell(cell);
+        return;
+      }
+      
+      setSelectedCell(cell);
     }
-  )
-  .subscribe();
+    function generateSalonCode() {
+      return Math.random().toString(36).substring(2, 8).toUpperCase();
+    }
+    
+    async function createSalon() {
+      setIsCreatingSalon(true);
+      
+      const code = generateSalonCode();
+      
+      const { error } = await supabase
+      .from("yam_games")
+      .insert({
+        code,
+        mode: gameMode,
+        player_count: playerCount,
+        status: "waiting",
+        current_player_order: 1,
+      })
+      .select("id")
+      .single();
+      
+      if (error) {
+        console.error("SUPABASE ERROR", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        
+        alert(error.message);
+        
+        setIsCreatingSalon(false);
+        return;
+      }
+      
+      setIsCreatingSalon(false);
+      router.push(`/salon/${code}`);
+    }
+    async function loadSalonPlayers() {
+      if (!salonGameId) return;
+      
+      const { data, error } = await supabase
+      .from("yam_players")
+      .select("id, name, player_order")
+      .eq("game_id", salonGameId)
+      .order("player_order", { ascending: true });
+      
+      if (error) {
+        console.error(error);
+        return;
+      }
+      
+      setSalonPlayers(data ?? []);
+    }
+    function getTournamentName(
+      theme:
+      | "australian_open"
+      | "roland_garros"
+      | "wimbledon"
+      | "us_open"
+    ) {
+      switch (theme) {
+        case "australian_open":
+        return "Open d’Australie";
+        
+        case "roland_garros":
+        return "Roland-Garros";
+        
+        case "wimbledon":
+        return "Wimbledon";
+        
+        case "us_open":
+        return "US Open";
+      }
+    }
+    useEffect(() => {
+      if (!salonGameId) return;
+      
+      loadSalonPlayers();
+      
+      const channel = supabase
+      .channel(`yam_players_${salonGameId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "yam_players",
+          filter: `game_id=eq.${salonGameId}`,
+        },
+        () => {
+          loadSalonPlayers();
+        }
+      )
+      .subscribe();
+      
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }, [salonGameId]);
+    useEffect(() => {
+      if (!salonGameId) return;
+      
+      const channel = supabase
+      .channel(`yam_scores_${salonGameId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "yam_scores",
+          filter: `game_id=eq.${salonGameId}`,
+        },
+        (payload) => {
+          const newScore = payload.new as {
+            player_id: string;
+            column_id: string;
+            row_id: YamRow;
+            value: string;
+          };
+          
+          setScores((current) => ({
+            ...current,
+            [newScore.player_id]: {
+              ...current[newScore.player_id],
+              [newScore.column_id]: {
+                ...current[newScore.player_id]?.[newScore.column_id],
+                [newScore.row_id]:
+                newScore.value === "X" ? "X" : Number(newScore.value),
+              },
+            },
+          }));
+        }
+      )
+      .subscribe();
+      
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }, [salonGameId]);
+    useEffect(() => {
+      if (isOnline || !currentLocalGameId) return;
+      
+      const interval = window.setInterval(() => {
+        void checkSupabaseConnection();
+      }, 5000);
+      
+      return () => {
+        window.clearInterval(interval);
+      };
+    }, [isOnline, currentLocalGameId]);
+    function newGameFromVictory() {
+      localStorage.removeItem(STORAGE_KEY);
+      
+      setPlayers([]);
+      setSetupPlayerNames([]);
+      setLinkedProfiles({});
+      setScores({});
+      setSelectedCell(null);
+      setScoreInput("");
+      setShowVictoryModal(false);
+      setHasSavedGame(false);
+      setScreen("home");
+    }
+    function startEditingPlayer(playerId: string, currentName: string) {
+      if (gameFinished) return;
+      setEditingPlayerId(playerId);
+      setEditingName(currentName);
+    }
+    function resumeGame() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      
+      if (!saved) return;
+      
+      const data = JSON.parse(saved);
+      
+      setPlayers(data.players ?? []);
+      setScores(data.scores ?? {});
+      setGameMode(data.gameMode ?? "6cols");
+      setHasSavedGame(false);
+      setScreen("game");
+    }
+    function savePlayerName(playerId: string) {
+      if (!editingName.trim()) return;
+      
+      setPlayers((current) =>
+        current.map((player) =>
+          player.id === playerId
+      ? { ...player, name: editingName.trim() }
+      : player
+    )
+  );
   
-  return () => {
-    supabase.removeChannel(channel);
-  };
-}, [salonGameId]);
-useEffect(() => {
-  if (isOnline || !currentLocalGameId) return;
-
-  const interval = window.setInterval(() => {
-    void checkSupabaseConnection();
-  }, 5000);
-
-  return () => {
-    window.clearInterval(interval);
-  };
-}, [isOnline, currentLocalGameId]);
-function newGameFromVictory() {
-  localStorage.removeItem(STORAGE_KEY);
-  
-  setPlayers([]);
-  setSetupPlayerNames([]);
-  setLinkedProfiles({});
-  setScores({});
-  setSelectedCell(null);
-  setScoreInput("");
-  setShowVictoryModal(false);
-  setHasSavedGame(false);
-  setScreen("home");
-}
-function startEditingPlayer(playerId: string, currentName: string) {
-  if (gameFinished) return;
-  setEditingPlayerId(playerId);
-  setEditingName(currentName);
-}
-function resumeGame() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  
-  if (!saved) return;
-  
-  const data = JSON.parse(saved);
-  
-  setPlayers(data.players ?? []);
-  setScores(data.scores ?? {});
-  setGameMode(data.gameMode ?? "6cols");
-  setHasSavedGame(false);
-  setScreen("game");
-}
-function savePlayerName(playerId: string) {
-  if (!editingName.trim()) return;
-  
-  setPlayers((current) =>
-    current.map((player) =>
-      player.id === playerId
-  ? { ...player, name: editingName.trim() }
-  : player
-)
-);
-
-setEditingPlayerId(null);
+  setEditingPlayerId(null);
 }
 function getRemainingMoves(playerId: string) {
   return activeColumns.reduce((total, column) => {
@@ -1382,7 +1467,85 @@ function getBaseXpGain(playerId: string, rank: number) {
     FIGURE_XP.bonus
   );
 }
+function getBasketBonusXp(playerId: string) {
+  if (
+    competitionLocalSet?.competitionType !== "basket" ||
+    !basketQuarterScores
+  ) {
+    return 0;
+  }
 
+  const player = players.find(
+    (item) => item.id === playerId
+  );
+
+  if (!player?.basketTeam) {
+    return 0;
+  }
+
+  const team = player.basketTeam;
+
+  let quarterWins = 0;
+
+  for (const quarter of [1, 2, 3, 4] as const) {
+    const score = basketQuarterScores[quarter];
+
+    if (
+      team === "A" &&
+      score.teamA > score.teamB
+    ) {
+      quarterWins += 1;
+    }
+
+    if (
+      team === "B" &&
+      score.teamB > score.teamA
+    ) {
+      quarterWins += 1;
+    }
+  }
+
+  const currentLeaderboard = getLeaderboard();
+
+const teamAFinalScore = currentLeaderboard
+  .filter((item) => item.basketTeam === "A")
+  .reduce(
+    (total, item) => total + item.total,
+    0
+  );
+
+const teamBFinalScore = currentLeaderboard
+  .filter((item) => item.basketTeam === "B")
+  .reduce(
+    (total, item) => total + item.total,
+    0
+  );
+
+  const winnerTeam =
+    teamAFinalScore > teamBFinalScore
+      ? "A"
+      : teamBFinalScore > teamAFinalScore
+        ? "B"
+        : null;
+
+  let xp =
+    quarterWins * BASKET_XP.quarterWin;
+
+  if (winnerTeam === team) {
+    xp += BASKET_XP.matchWin;
+  }
+
+  if (
+    winnerTeam === team &&
+    quarterWins === 4
+  ) {
+    xp += BASKET_XP.sweep;
+  }
+
+  
+
+  return xp;
+}
 function countFigure(playerId: string, rowId: YamRow) {
   return activeColumns.reduce((total, column) => {
     const value = getScore(playerId, column.id, rowId);
@@ -1458,26 +1621,31 @@ function confirmQuitGame() {
     setHasSavedGame(false);
     
     let competitionRoute: string;
-
-switch (competitionLocalSet.competitionType) {
-  case "world_cup":
-    competitionRoute =
+    
+    switch (competitionLocalSet.competitionType) {
+      case "world_cup":
+      competitionRoute =
       `/modes-speciaux/coupe-du-monde/${competitionId}`;
-    break;
-
-  case "grand_prix":
-    competitionRoute =
+      break;
+      
+      case "basket":
+      competitionRoute =
+      `/modes-speciaux/basket/${competitionId}`;
+      break;
+      
+      case "grand_prix":
+      competitionRoute =
       `/modes-speciaux/grand-prix/${competitionId}`;
-    break;
-
-  case "grand_slam_final":
-  default:
-    competitionRoute =
+      break;
+      
+      case "grand_slam_final":
+      default:
+      competitionRoute =
       `/modes-speciaux/grand-chelem/${competitionId}`;
-    break;
-}
-
-router.push(competitionRoute);
+      break;
+    }
+    
+    router.push(competitionRoute);
     
     return;
   }
@@ -1530,102 +1698,304 @@ function getScoreOptions(rowId: YamRow) {
 function isValidScoreForRow(rowId: YamRow, value: number) {
   return getScoreOptions(rowId).includes(value);
 }
-function fillRandomGame() {
-  const nextScores: Scores = { ...scores };
+async function fillRandomGame() {
+  const isBasket =
+  competitionLocalSet?.competitionType === "basket";
   
-  for (const player of players) {
-    nextScores[player.id] = {
-      ...(nextScores[player.id] ?? {}),
-    };
+  // Comportement normal hors Basket :
+  // on garde le remplissage complet actuel.
+  if (!isBasket) {
+    const nextScores: Scores = structuredClone(scores);
     
-    for (const column of activeColumns) {
-      nextScores[player.id][column.id] = {
-        ...(nextScores[player.id][column.id] ?? {}),
+    for (const player of players) {
+      nextScores[player.id] = {
+        ...(nextScores[player.id] ?? {}),
       };
       
-      for (const row of rows) {
-        const options = getScoreOptions(row.id);
+      for (const column of activeColumns) {
+        nextScores[player.id][column.id] = {
+          ...(nextScores[player.id][column.id] ?? {}),
+        };
         
-        const value =
+        for (const row of rows) {
+          const options = getScoreOptions(row.id);
+          
+          const value =
+          Math.random() < 0.15
+          ? "X"
+          : options[
+            Math.floor(
+              Math.random() * options.length
+            )
+          ];
+          
+          nextScores[player.id][column.id][row.id] =
+          value;
+        }
+      }
+    }
+    
+    setScores(nextScores);
+    return;
+  }
+  
+  // -----------------------------
+  // MODE BASKET : 1 quart-temps
+  // -----------------------------
+  
+  const quarter = getBasketQuarter();
+  
+  if (!quarter) return;
+  
+  const targetMovesPerPlayer =
+  gameMode === "3cols"
+  ? {
+    1: 10,
+    2: 20,
+    3: 30,
+    4: 39,
+  }[quarter]
+  : {
+    1: 20,
+    2: 40,
+    3: 59,
+    4: 78,
+  }[quarter];
+  
+  const nextScores: Scores =
+  structuredClone(scores);
+  
+  const nextScoreQuarters: ScoreQuarters =
+  structuredClone(scoreQuarters);
+  
+  const rowsToSave: {
+    game_id: string;
+    player_key: string;
+    column_id: string;
+    row_id: YamRow;
+    value: string;
+    basket_quarter: number;
+  }[] = [];
+  
+  for (const player of players) {
+    nextScores[player.id] ??= {};
+    nextScoreQuarters[player.id] ??= {};
+    
+    let playedMoves = activeColumns.reduce(
+      (total, column) =>
+        total +
+      rows.filter(
+        (row) =>
+          getScore(
+          player.id,
+          column.id,
+          row.id
+        ) !== null
+      ).length,
+      0
+    );
+    
+    const movesToFill =
+    targetMovesPerPlayer - playedMoves;
+    
+    if (movesToFill <= 0) {
+      continue;
+    }
+    
+    let filled = 0;
+    
+    for (const column of activeColumns) {
+      if (filled >= movesToFill) break;
+      
+      nextScores[player.id][column.id] ??=
+      {} as Record<YamRow, ScoreValue>;
+      nextScoreQuarters[player.id][column.id] ??= {};
+      
+      for (const row of rows) {
+        if (filled >= movesToFill) break;
+        
+        const existing =
+        getScore(
+          player.id,
+          column.id,
+          row.id
+        );
+        
+        if (existing !== null) {
+          continue;
+        }
+        
+        const options =
+        getScoreOptions(row.id);
+        
+        const value: number | "X" =
         Math.random() < 0.15
         ? "X"
-        : options[Math.floor(Math.random() * options.length)];
+        : options[
+          Math.floor(
+            Math.random() * options.length
+          )
+        ];
         
-        nextScores[player.id][column.id][row.id] = value;
+        nextScores[player.id][column.id][row.id] =
+        value;
+        
+        nextScoreQuarters[player.id][column.id][
+          row.id
+        ] = quarter;
+        
+        if (currentLocalGameId) {
+          rowsToSave.push({
+            game_id: currentLocalGameId,
+            player_key: player.id,
+            column_id: column.id,
+            row_id: row.id,
+            value: String(value),
+            basket_quarter: quarter,
+          });
+        }
+        
+        filled += 1;
+        playedMoves += 1;
       }
     }
   }
   
+  // Sauvegarde Supabase pour que le test survive
+  // à un refresh / quitter-reprendre.
+  if (
+    currentLocalGameId &&
+    rowsToSave.length > 0
+  ) {
+    const { error } = await supabase
+    .from("local_game_scores")
+    .upsert(rowsToSave, {
+      onConflict:
+      "game_id,player_key,column_id,row_id",
+    });
+    
+    if (error) {
+      console.error(
+        "Erreur remplissage quart-temps Basket :",
+        error
+      );
+      
+      return;
+    }
+  }
+  
   setScores(nextScores);
+  setScoreQuarters(nextScoreQuarters);
 }
 async function reloadScoresFromSupabase() {
   if (!currentLocalGameId) return;
-
+  
   const { data, error } = await supabase
-    .from("local_game_scores")
-    .select("player_key, column_id, row_id, value")
-    .eq("game_id", currentLocalGameId);
-
+  .from("local_game_scores")
+  .select(
+    "player_key, column_id, row_id, value, basket_quarter"
+  )
+  .eq("game_id", currentLocalGameId);
+  
   if (error) {
-    console.error("Erreur rechargement des scores :", error);
+    console.error(
+      "Erreur rechargement des scores :",
+      error
+    );
     return;
   }
-
+  
   const loadedScores: Scores = {};
-
+  const loadedScoreQuarters: ScoreQuarters = {};
+  
   for (const score of data ?? []) {
     loadedScores[score.player_key] = {
       ...loadedScores[score.player_key],
+      
       [score.column_id]: {
-        ...loadedScores[score.player_key]?.[score.column_id],
+        ...loadedScores[score.player_key]?.[
+          score.column_id
+        ],
+        
         [score.row_id as YamRow]:
-          score.value === "X" ? "X" : Number(score.value),
+        score.value === "X"
+        ? "X"
+        : Number(score.value),
       },
     };
+    
+    if (
+      score.basket_quarter &&
+      score.basket_quarter >= 1 &&
+      score.basket_quarter <= 4
+    ) {
+      loadedScoreQuarters[score.player_key] = {
+        ...loadedScoreQuarters[score.player_key],
+        
+        [score.column_id]: {
+          ...loadedScoreQuarters[score.player_key]?.[
+            score.column_id
+          ],
+          
+          [score.row_id as YamRow]:
+          score.basket_quarter as 1 | 2 | 3 | 4,
+        },
+      };
+    }
   }
-
+  
   setScores(loadedScores);
+  setScoreQuarters(loadedScoreQuarters);
 }
 async function saveScore(value: number | "X"): Promise<boolean> {
   if (gameFinished) return false;
   if (!selectedCell) return false;
   if (isSavingScore) return false;
-
+  
   const { playerId, columnId, rowId } = selectedCell;
+  
+  const existingBasketQuarter =
+  scoreQuarters[playerId]?.[columnId]?.[rowId] ?? null;
+  
+  const basketQuarterForScore =
+  competitionLocalSet?.competitionType === "basket"
+  ? existingBasketQuarter ?? getBasketQuarter()
+  : null;
+  
   let finalValue: number | "X" = value;
-
+  
   if (
     typeof value === "number" &&
     (rowId === "plus" || rowId === "minus")
   ) {
     const oppositeRowId = rowId === "plus" ? "minus" : "plus";
     const oppositeValue = getScore(playerId, columnId, oppositeRowId);
-
+    
     if (typeof oppositeValue === "number") {
       if (rowId === "plus" && value <= oppositeValue) {
         finalValue = -50;
       }
-
+      
       if (rowId === "minus" && value >= oppositeValue) {
         finalValue = -50;
       }
     }
   }
-
+  
   /*
-   * Une partie possédant currentLocalGameId est notamment
-   * un set de compétition sauvegardé coup par coup dans Supabase.
-   */
+  * Une partie possédant currentLocalGameId est notamment
+  * un set de compétition sauvegardé coup par coup dans Supabase.
+  */
   if (currentLocalGameId) {
-  if (!navigator.onLine) {
-  markConnectionLost();
-  return false;
-}
-
-  setIsSavingScore(true);
-
-  try {
-    const { error } = await supabase
+    if (!navigator.onLine) {
+      markConnectionLost();
+      return false;
+    }
+    
+    setIsSavingScore(true);
+    
+    try {
+      const { error } = await supabase
       .from("local_game_scores")
       .upsert(
         {
@@ -1634,16 +2004,38 @@ async function saveScore(value: number | "X"): Promise<boolean> {
           column_id: columnId,
           row_id: rowId,
           value: String(finalValue),
+          
+          basket_quarter: basketQuarterForScore,
         },
         {
           onConflict: "game_id,player_key,column_id,row_id",
         }
       );
-
-    if (error) {
-      throw error;
+      
+      if (error) {
+        throw error;
+      }
+      
+      setScores((current) => ({
+        ...current,
+        [playerId]: {
+          ...current[playerId],
+          [columnId]: {
+            ...current[playerId]?.[columnId],
+            [rowId]: finalValue,
+          },
+        },
+      }));
+    } catch (error) {
+      console.error("Erreur sauvegarde score :", error);
+      
+      markConnectionLost();
+      
+      return false;
+    } finally {
+      setIsSavingScore(false);
     }
-
+  } else {
     setScores((current) => ({
       ...current,
       [playerId]: {
@@ -1654,41 +2046,36 @@ async function saveScore(value: number | "X"): Promise<boolean> {
         },
       },
     }));
-  } catch (error) {
-    console.error("Erreur sauvegarde score :", error);
-
-    markConnectionLost();
-
-    return false;
-  } finally {
-    setIsSavingScore(false);
   }
-} else {
-  setScores((current) => ({
-    ...current,
-    [playerId]: {
-      ...current[playerId],
-      [columnId]: {
-        ...current[playerId]?.[columnId],
-        [rowId]: finalValue,
+  if (basketQuarterForScore) {
+    setScoreQuarters((current) => ({
+      ...current,
+      
+      [playerId]: {
+        ...current[playerId],
+        
+        [columnId]: {
+          ...current[playerId]?.[columnId],
+          
+          [rowId]: basketQuarterForScore,
+        },
       },
-    },
-  }));
-}
-
+    }));
+  }
+  
   setLastScoreAnimation({
     playerId,
     columnId,
     rowId,
     value: finalValue,
   });
-
+  
   window.setTimeout(() => {
     setLastScoreAnimation(null);
   }, 800);
-
+  
   closeModal();
-
+  
   return true;
 }
 
@@ -1696,30 +2083,29 @@ async function clearScore(): Promise<boolean> {
   if (gameFinished) return false;
   if (!selectedCell) return false;
   if (isSavingScore) return false;
-
+  
   const { playerId, columnId, rowId } = selectedCell;
-
   if (currentLocalGameId) {
     if (!navigator.onLine) {
       markConnectionLost();
       return false;
     }
-
+    
     setIsSavingScore(true);
-
+    
     try {
       const { error } = await supabase
-        .from("local_game_scores")
-        .delete()
-        .eq("game_id", currentLocalGameId)
-        .eq("player_key", playerId)
-        .eq("column_id", columnId)
-        .eq("row_id", rowId);
-
+      .from("local_game_scores")
+      .delete()
+      .eq("game_id", currentLocalGameId)
+      .eq("player_key", playerId)
+      .eq("column_id", columnId)
+      .eq("row_id", rowId);
+      
       if (error) {
         throw error;
       }
-
+      
       // On efface visuellement uniquement après confirmation Supabase.
       setScores((current) => ({
         ...current,
@@ -1733,9 +2119,9 @@ async function clearScore(): Promise<boolean> {
       }));
     } catch (error) {
       console.error("Erreur suppression score :", error);
-
+      
       markConnectionLost();
-
+      
       return false;
     } finally {
       setIsSavingScore(false);
@@ -1753,7 +2139,20 @@ async function clearScore(): Promise<boolean> {
       },
     }));
   }
-
+  if (
+    competitionLocalSet?.competitionType === "basket"
+  ) {
+    setScoreQuarters((current) => {
+      const next = structuredClone(current);
+      
+      if (next[playerId]?.[columnId]) {
+        delete next[playerId][columnId][rowId];
+      }
+      
+      return next;
+    });
+  }
+  
   closeModal();
   return true;
 }
@@ -1855,7 +2254,176 @@ function getTotalPlayedMoves() {
     );
   }, 0);
 }
-
+function getBasketQuarter(): 1 | 2 | 3 | 4 | null {
+  if (
+    competitionLocalSet?.competitionType !== "basket" ||
+    players.length === 0
+  ) {
+    return null;
+  }
+  
+  const totalPlayedMoves = getTotalPlayedMoves();
+  
+  // Numéro du prochain coup pour chaque joueur.
+  // Exemple à 4 joueurs :
+  // après 40 coups joués = chacun a joué 10 fois
+  // donc le prochain coup est le 11e -> Q2.
+  const nextMoveNumber =
+  Math.floor(totalPlayedMoves / players.length) + 1;
+  
+  if (gameMode === "3cols") {
+    if (nextMoveNumber <= 10) return 1;
+    if (nextMoveNumber <= 20) return 2;
+    if (nextMoveNumber <= 30) return 3;
+    
+    return 4;
+  }
+  
+  if (nextMoveNumber <= 20) return 1;
+  if (nextMoveNumber <= 40) return 2;
+  if (nextMoveNumber <= 59) return 3;
+  
+  return 4;
+}
+function getBasketBonusQuarter(
+  playerId: string,
+  columnId: string
+): 1 | 2 | 3 | 4 | null {
+  const topRows = rows.slice(0, 6);
+  
+  let cumulativeTopScore = 0;
+  
+  for (const quarter of [1, 2, 3, 4] as const) {
+    for (const row of topRows) {
+      const scoreQuarter =
+      scoreQuarters[playerId]?.[columnId]?.[row.id];
+      
+      if (scoreQuarter !== quarter) {
+        continue;
+      }
+      
+      const value = getScore(
+        playerId,
+        columnId,
+        row.id
+      );
+      
+      if (typeof value === "number") {
+        cumulativeTopScore += value;
+      }
+    }
+    
+    if (cumulativeTopScore >= 60) {
+      return quarter;
+    }
+  }
+  
+  return null;
+}
+function getBasketQuarterScores(
+  quarter: 1 | 2 | 3 | 4
+): {
+  teamA: number;
+  teamB: number;
+} {
+  let teamA = 0;
+  let teamB = 0;
+  
+  for (const player of players) {
+    if (
+      player.basketTeam !== "A" &&
+      player.basketTeam !== "B"
+    ) {
+      continue;
+    }
+    
+    let playerQuarterScore = 0;
+    
+    const playerScores = scores[player.id] ?? {};
+    const playerQuarters =
+    scoreQuarters[player.id] ?? {};
+    
+    for (const [columnId, columnScores] of Object.entries(
+      playerScores
+    )) {
+      if (!columnScores) continue;
+      
+      for (const [rowId, value] of Object.entries(
+        columnScores
+      )) {
+        const scoreQuarter =
+        playerQuarters[columnId]?.[rowId as YamRow];
+        
+        if (scoreQuarter !== quarter) {
+          continue;
+        }
+        
+        if (typeof value === "number") {
+          playerQuarterScore += value;
+        }
+      }
+      
+      // Bonus supérieur de 35 points :
+      // il compte dans le quart-temps où le seuil de 60 est atteint.
+      const bonusQuarter =
+      getBasketBonusQuarter(player.id, columnId);
+      
+      if (bonusQuarter === quarter) {
+        playerQuarterScore += 35;
+      }
+    }
+    
+    if (player.basketTeam === "A") {
+      teamA += playerQuarterScore;
+    } else {
+      teamB += playerQuarterScore;
+    }
+  }
+  
+  return {
+    teamA,
+    teamB,
+  };
+}
+function getBasketQuarterPoints() {
+  if (
+    competitionLocalSet?.competitionType !== "basket"
+  ) {
+    return {
+      teamA: 0,
+      teamB: 0,
+    };
+  }
+  
+  const currentQuarter = getBasketQuarter();
+  
+  let teamA = 0;
+  let teamB = 0;
+  
+  for (const quarter of [1, 2, 3, 4] as const) {
+    // On ne compte que les quart-temps déjà terminés.
+    if (
+      currentQuarter !== null &&
+      quarter >= currentQuarter &&
+      !gameFinished
+    ) {
+      continue;
+    }
+    
+    const scores = getBasketQuarterScores(quarter);
+    
+    if (scores.teamA > scores.teamB) {
+      teamA += 1;
+    } else if (scores.teamB > scores.teamA) {
+      teamB += 1;
+    }
+  }
+  
+  return {
+    teamA,
+    teamB,
+  };
+}
 function getCurrentPlayerId() {
   if (players.length === 0) return null;
   
@@ -1871,24 +2439,24 @@ function getLeaderboard() {
     ...player,
     total: getPlayerTotal(player.id),
   }));
-
+  
   const sorted = [...totals].sort((a, b) => b.total - a.total);
   const leaderTotal = sorted[0]?.total ?? 0;
-
+  
   return sorted.map((player, index) => {
     const rank = index + 1;
-
+    
     const provisionalGrandPrixPoints =
-      competitionLocalSet?.competitionType === "grand_prix"
-        ? GRAND_PRIX_POINTS[index] ?? 0
-        : 0;
-
+    competitionLocalSet?.competitionType === "grand_prix"
+    ? GRAND_PRIX_POINTS[index] ?? 0
+    : 0;
+    
     const championshipPoints =
-      competitionLocalSet?.competitionType === "grand_prix"
-        ? (grandPrixPointsByPlayer[player.id] ?? 0) +
-          provisionalGrandPrixPoints
-        : null;
-
+    competitionLocalSet?.competitionType === "grand_prix"
+    ? (grandPrixPointsByPlayer[player.id] ?? 0) +
+    provisionalGrandPrixPoints
+    : null;
+    
     return {
       ...player,
       rank,
@@ -1904,24 +2472,72 @@ function getLeaderboard() {
 }
 const currentPlayerId = getCurrentPlayerId();
 const gameFinished = isGameFinished();
+const basketQuarter = getBasketQuarter();
+const basketQuarterScores =
+competitionLocalSet?.competitionType === "basket"
+? {
+  1: getBasketQuarterScores(1),
+  2: getBasketQuarterScores(2),
+  3: getBasketQuarterScores(3),
+  4: getBasketQuarterScores(4),
+}
+: null;
+const basketQuarterPoints =
+competitionLocalSet?.competitionType === "basket"
+? getBasketQuarterPoints()
+: null;
+useEffect(() => {
+  if (
+    competitionLocalSet?.competitionType !== "basket"
+  ) {
+    previousBasketQuarterRef.current = null;
+    return;
+  }
+  
+  if (!basketQuarter) {
+    previousBasketQuarterRef.current = null;
+    return;
+  }
+  
+  const previousQuarter =
+  previousBasketQuarterRef.current;
+  
+  if (
+    previousQuarter !== null &&
+    basketQuarter > previousQuarter &&
+    previousQuarter <= 3
+  ) {
+    setFinishedBasketQuarter(
+      previousQuarter as 1 | 2 | 3
+    );
+    
+    setShowBasketQuarterModal(true);
+  }
+  
+  previousBasketQuarterRef.current =
+  basketQuarter;
+}, [
+  basketQuarter,
+  competitionLocalSet?.competitionType,
+]);  
 const tournamentTheme =
-  competitionLocalSet
-    ? competitionLocalSet.competitionType === "grand_prix"
-      ? getGrandPrixCircuitTheme(
-          competitionLocalSet.circuitId!
-        )
-      : getTournamentTheme(
-          competitionLocalSet.theme
-        )
-    : null;
+competitionLocalSet
+? competitionLocalSet.competitionType === "grand_prix"
+? getGrandPrixCircuitTheme(
+  competitionLocalSet.circuitId!
+)
+: getTournamentTheme(
+  competitionLocalSet.theme
+)
+: null;
 const quitLabel =
-  competitionLocalSet?.competitionType === "world_cup"
-    ? "Quitter le match"
-    : competitionLocalSet?.competitionType === "grand_slam_final"
-      ? "Quitter le set"
-      : competitionLocalSet?.competitionType === "grand_prix"
-        ? "Quitter le Grand Prix"
-        : "Quitter la partie";
+competitionLocalSet?.competitionType === "world_cup"
+? "Quitter le match"
+: competitionLocalSet?.competitionType === "grand_slam_final"
+? "Quitter le set"
+: competitionLocalSet?.competitionType === "grand_prix"
+? "Quitter le Grand Prix"
+: "Quitter la partie";
 const [finishedGameSaved, setFinishedGameSaved] = useState(false);
 useEffect(() => {
   async function updateProfileStatsAfterGame({
@@ -1937,8 +2553,8 @@ useEffect(() => {
     worldCupFinalReached,
     worldCupWin,
     grandPrixPlayed,
-grandPrixWin,
-grandPrixPodium,
+    grandPrixWin,
+    grandPrixPodium,
   }: {
     gameId: string;
     profileId: string;
@@ -1952,8 +2568,8 @@ grandPrixPodium,
     worldCupFinalReached: number;
     worldCupWin: number;
     grandPrixPlayed: number;
-  grandPrixWin: number;
-  grandPrixPodium: number;
+    grandPrixWin: number;
+    grandPrixPodium: number;
   }) {
     const is3Cols = mode === "3cols";
     const currentPlayerIdForStats = playerId;
@@ -1994,8 +2610,8 @@ grandPrixPodium,
       p_world_cup_wins:
       worldCupWin,
       p_grand_prix_played: grandPrixPlayed,
-p_grand_prix_wins: grandPrixWin,
-p_grand_prix_podiums: grandPrixPodium,
+      p_grand_prix_wins: grandPrixWin,
+      p_grand_prix_podiums: grandPrixPodium,
     });
     
     if (error) {
@@ -2040,7 +2656,7 @@ p_grand_prix_podiums: grandPrixPodium,
     // Verrou immédiat : contrairement à setState, la ref change tout de suite.
     finishLocalGameStartedRef.current = true;
     
-    console.log("🏁 finishLocalGame réellement lancée");
+    
     
     // La partie est terminée : on affiche immédiatement la modale.
     setShowVictoryModal(true);
@@ -2049,7 +2665,7 @@ p_grand_prix_podiums: grandPrixPodium,
       (player) => Boolean(player.linkedUserId)
     );
     
-    console.log("👥 Profils liés :", linkedPlayers);
+    
     
     /*
     Une partie locale classique sans profil n'est pas
@@ -2094,10 +2710,7 @@ p_grand_prix_podiums: grandPrixPodium,
     if (competitionLocalSet && currentLocalGameId) {
       createdGameId = currentLocalGameId;
       
-      console.log("🏆 Finalisation du set local de compétition", {
-        createdGameId,
-        competitionLocalSet,
-      });
+      
       
       const { error: gameError } = await supabase
       .from("local_games")
@@ -2156,7 +2769,7 @@ p_grand_prix_podiums: grandPrixPodium,
         return;
       }
     } else {
-      console.log("📝 Création de la partie locale classique...");
+      
       if (!ownerId) {
         console.error(
           "Impossible de créer la partie : ownerId absent"
@@ -2244,17 +2857,24 @@ if (scoreRows.length > 0) {
     console.error("Erreur sauvegarde scores finaux", scoresError);
   }
 }
-
+const pendingBasketXpByPlayer: Record<
+  string,
+  {
+    baseXp: number;
+    badgeXp: number;
+    badges: {
+      label: string;
+      milestone: number;
+      xp: number;
+    }[];
+  }
+> = {};
 for (const player of leaderboard) {
   if (!player.linkedUserId) continue;
   
   // Pour l'instant, depuis le client, on ne met à jour que le profil connecté.
   
-  console.log("stats update check", {
-    currentUserId,
-    linkedUserId: player.linkedUserId,
-    same: player.linkedUserId === currentUserId,
-  });
+  
   const statsBefore = await getProfileStatsForGamePlayer(
     createdGameId,
     player.linkedUserId
@@ -2284,21 +2904,21 @@ for (const player of leaderboard) {
     ? 1
     : 0,
     grandPrixPlayed:
-  competitionLocalSet?.competitionType === "grand_prix"
+    competitionLocalSet?.competitionType === "grand_prix"
     ? 1
     : 0,
-
-grandPrixWin:
-  competitionLocalSet?.competitionType === "grand_prix" &&
-  player.rank === 1
+    
+    grandPrixWin:
+    competitionLocalSet?.competitionType === "grand_prix" &&
+    player.rank === 1
     ? 1
     : 0,
-
-grandPrixPodium:
-  competitionLocalSet?.competitionType === "grand_prix" &&
-  playerCount >= 4 &&
-  player.rank >= 1 &&
-  player.rank <= 3
+    
+    grandPrixPodium:
+    competitionLocalSet?.competitionType === "grand_prix" &&
+    playerCount >= 4 &&
+    player.rank >= 1 &&
+    player.rank <= 3
     ? 1
     : 0,
   });
@@ -2363,56 +2983,78 @@ const badgeXp = awardedBadges.reduce(
   0
 );
 
-const baseXp = getBaseXpGain(player.id, player.rank);
+const yamBaseXp =
+  getBaseXpGain(player.id, player.rank);
+
+const basketBonusXp =
+  getBasketBonusXp(player.id);
+
+const baseXp =
+  yamBaseXp + basketBonusXp;
 
 
 
-const totalXpGain =
-baseXp +
-badgeXp;
-const { data: xpResult, error: xpError } = await supabase.rpc(
-  "add_profile_xp_for_local_game_player",
-  {
-    p_game_id: createdGameId,
-    p_profile_id: player.linkedUserId,
-    p_xp_gain: totalXpGain,
-  }
-);
-
-if (xpError) {
-  console.error("Erreur ajout XP", {
-    message: xpError.message,
-    details: xpError.details,
-    hint: xpError.hint,
-    code: xpError.code,
-  });
+if (
+  competitionLocalSet?.competitionType === "basket"
+) {
+  // En Basket, on attend finish_basket_match avant
+  // d'attribuer réellement l'XP.
+  pendingBasketXpByPlayer[player.id] = {
+    baseXp,
+    badgeXp,
+    badges: awardedBadges,
+  };
 } else {
-  const result = Array.isArray(xpResult) ? xpResult[0] : xpResult;
-  
-  if (result) {
-    const totalXpAfter = result.total_xp;
-    const totalXpBefore = totalXpAfter - result.xp_gained;
-    
-    setXpResultsByPlayer((current) => ({
-      ...current,
-      [player.id]: {
-        xpGain: result.xp_gained,
-        oldLevel: getLevelFromTotalXp(totalXpBefore),
-        newLevel: getLevelFromTotalXp(totalXpAfter),
-        baseXp,
-        
-        badgeXp,
-        badges: awardedBadges,
-      },
-    }));
+  const totalXpGain =
+    baseXp + badgeXp;
+
+  const {
+    data: xpResult,
+    error: xpError,
+  } = await supabase.rpc(
+    "add_profile_xp_for_local_game_player",
+    {
+      p_game_id: createdGameId,
+      p_profile_id: player.linkedUserId,
+      p_xp_gain: totalXpGain,
+    }
+  );
+
+  if (xpError) {
+    console.error("Erreur ajout XP", {
+      message: xpError.message,
+      details: xpError.details,
+      hint: xpError.hint,
+      code: xpError.code,
+    });
+  } else {
+    const result = Array.isArray(xpResult)
+      ? xpResult[0]
+      : xpResult;
+
+    if (result) {
+      const totalXpAfter = result.total_xp;
+      const totalXpBefore =
+        totalXpAfter - result.xp_gained;
+
+      setXpResultsByPlayer((current) => ({
+        ...current,
+        [player.id]: {
+          xpGain: result.xp_gained,
+          oldLevel:
+            getLevelFromTotalXp(totalXpBefore),
+          newLevel:
+            getLevelFromTotalXp(totalXpAfter),
+          baseXp,
+          badgeXp,
+          badges: awardedBadges,
+        },
+      }));
+    }
   }
+
+ 
 }
-console.log("XP total gagné", {
-  baseXp,
-  badgeXp,
-  
-  totalXpGain,
-});
 
 }
 if (competitionLocalSet) {
@@ -2429,40 +3071,96 @@ if (competitionLocalSet) {
   .single();
   
   let rpcName: string;
-let rpcParams: any;
-
-if (competitionData?.competition_type === "world_cup") {
-  rpcName = "finish_world_cup_match";
-
-  rpcParams = {
-    p_competition_id: competitionLocalSet.competitionId,
-    p_match_id: matchId,
-    p_game_id: createdGameId,
-    p_play_mode: "local",
-  };
-} else if (competitionData?.competition_type === "grand_prix") {
-  rpcName = "finish_grand_prix";
-
-  rpcParams = {
-    p_competition_id: competitionLocalSet.competitionId,
-    p_grand_prix_id: new URLSearchParams(window.location.search).get("grandPrixId"),
-    p_game_id: createdGameId,
-    p_play_mode: "local",
-  };
-} else {
-  rpcName = "finish_competition_set";
-
-  rpcParams = {
-    p_competition_id: competitionLocalSet.competitionId,
-    p_game_id: createdGameId,
-    p_play_mode: "local",
-  };
-}
-
-const {
-  data: competitionResult,
-  error: competitionError,
-} = await supabase.rpc(rpcName, rpcParams);
+  let rpcParams: any;
+  
+  if (competitionData?.competition_type === "world_cup") {
+    rpcName = "finish_world_cup_match";
+    
+    rpcParams = {
+      p_competition_id: competitionLocalSet.competitionId,
+      p_match_id: matchId,
+      p_game_id: createdGameId,
+      p_play_mode: "local",
+    };
+  } else if (competitionData?.competition_type === "basket") {
+    const teamAFinalScore = leaderboard
+    .filter((player) => player.basketTeam === "A")
+    .reduce((total, player) => total + player.total, 0);
+    
+    const teamBFinalScore = leaderboard
+    .filter((player) => player.basketTeam === "B")
+    .reduce((total, player) => total + player.total, 0);
+    
+    const quarterPoints =
+    getBasketQuarterPoints();
+    
+    const winnerTeam =
+    teamAFinalScore > teamBFinalScore
+    ? "A"
+    : teamBFinalScore > teamAFinalScore
+    ? "B"
+    : null;
+    
+    rpcName = "finish_basket_match";
+    
+    rpcParams = {
+      p_competition_id:
+      competitionLocalSet.competitionId,
+      
+      p_basket_match_id:
+      competitionLocalSet.basketMatchId,
+      
+      p_game_id:
+      createdGameId,
+      
+      p_team_a_final_score:
+      teamAFinalScore,
+      
+      p_team_b_final_score:
+      teamBFinalScore,
+      
+      p_team_a_basket_points:
+      quarterPoints.teamA +
+      (winnerTeam === "A" ? 4 : 0),
+      
+      p_team_b_basket_points:
+      quarterPoints.teamB +
+      (winnerTeam === "B" ? 4 : 0),
+      
+      p_winner_team:
+      winnerTeam,
+    };
+  } else if (competitionData?.competition_type === "grand_prix") {
+    rpcName = "finish_grand_prix";
+    
+    rpcParams = {
+      p_competition_id:
+      competitionLocalSet.competitionId,
+      
+      p_grand_prix_id:
+      new URLSearchParams(window.location.search).get(
+        "grandPrixId"
+      ),
+      
+      p_game_id: createdGameId,
+      p_play_mode: "local",
+    };
+  } else {
+    rpcName = "finish_competition_set";
+    
+    rpcParams = {
+      p_competition_id:
+      competitionLocalSet.competitionId,
+      
+      p_game_id: createdGameId,
+      p_play_mode: "local",
+    };
+  }
+  
+  const {
+    data: competitionResult,
+    error: competitionError,
+  } = await supabase.rpc(rpcName, rpcParams);
   
   if (competitionError) {
     console.error(
@@ -2473,27 +3171,277 @@ const {
     setFinishedGameSaved(false);
     return;
   }
-  
+  const finishResult = Array.isArray(competitionResult)
+  ? competitionResult[0]
+  : competitionResult;
   setCompetitionFinishResult(
-    competitionResult as {
-      competition_finished: boolean;
+  finishResult as {
+    competition_finished: boolean;
+  }
+);
+  if (
+  competitionData?.competition_type === "basket"
+) {
+  const {
+    data: basketCompetitionState,
+    error: basketCompetitionStateError,
+  } = await supabase
+    .from("competitions")
+    .select("status, winner_team")
+    .eq(
+      "id",
+      competitionLocalSet.competitionId
+    )
+    .single();
+
+  if (basketCompetitionStateError) {
+    console.error(
+      "Erreur lecture résultat compétition Basket",
+      basketCompetitionStateError
+    );
+  } else {
+    for (const player of players) {
+      if (
+        !player.linkedUserId ||
+        !player.basketTeam
+      ) {
+        continue;
+      }
+
+      const teamBasketPoints =
+        player.basketTeam === "A"
+          ? rpcParams.p_team_a_basket_points
+          : rpcParams.p_team_b_basket_points;
+
+      const {
+        error: basketStatsError,
+      } = await supabase.rpc(
+        "add_basket_stats_for_local_game_player",
+        {
+          p_game_id: createdGameId,
+          p_profile_id:
+            player.linkedUserId,
+
+          p_team:
+            player.basketTeam,
+
+          p_winner_team:
+            rpcParams.p_winner_team,
+
+          p_team_basket_points:
+            teamBasketPoints,
+
+          p_competition_finished:
+            basketCompetitionState.status ===
+            "finished",
+
+          p_competition_winner_team:
+            basketCompetitionState.winner_team,
+        }
+      );
+
+      if (basketStatsError) {
+        console.error(
+          "Erreur mise à jour stats Basket",
+          {
+            player: player.name,
+            profileId:
+              player.linkedUserId,
+            basketStatsError,
+          }
+        );
+      }
+     
+      if (!basketStatsError) {
+  const updatedBasketStats =
+  await getProfileStatsForGamePlayer(
+    createdGameId,
+    player.linkedUserId
+  );
+
+if (!updatedBasketStats) {
+  console.error(
+    "Stats Basket introuvables après mise à jour",
+    {
+      player: player.name,
+      profileId: player.linkedUserId,
     }
   );
-if (competitionData?.competition_type === "grand_prix") {
-  const linkedProfileIds = players
-    .map((player) => player.linkedUserId)
-    .filter((id): id is string => Boolean(id));
+} else {
+  const basketBadges =
+      achievementDefinitions
+        .filter((definition) =>
+          definition.id.startsWith("basket_")
+        )
+        .flatMap((definition) => {
+          const value = Number(
+            updatedBasketStats[
+              definition.metric
+            ] ?? 0
+          );
 
-  for (const profileId of [...new Set(linkedProfileIds)]) {
-    const rebuilt = await rebuildProfileStats(profileId);
+          return getUnlockedMilestoneIndexes(
+            value,
+            definition.milestones
+          ).map((index) => ({
+            id: definition.id,
+            label: definition.label,
+            milestone:
+              definition.milestones[index],
+            xp:
+              definition.xpRewards?.[index] ??
+              BADGE_XP[index] ??
+              0,
+          }));
+        });
 
-    if (rebuilt) {
-      await syncProfileAchievements(profileId);
+    const {
+      data: claimedBasketBadges,
+      error: basketBadgeError,
+    } = await supabase.rpc(
+      "claim_profile_badges_for_local_game_player",
+      {
+        p_game_id: createdGameId,
+        p_profile_id:
+          player.linkedUserId,
+        p_badges: basketBadges,
+      }
+    );
+
+    if (basketBadgeError) {
+      console.error(
+        "Erreur succès Basket",
+        basketBadgeError
+      );
+    } else {
+  const basketBadgeXp =
+    (claimedBasketBadges ?? []).reduce(
+      (
+        total: number,
+        badge: {
+          claimed_xp_awarded: number;
+        }
+      ) =>
+        total +
+        Number(
+          badge.claimed_xp_awarded ?? 0
+        ),
+      0
+    );
+
+  const newBasketBadges =
+  (claimedBasketBadges ?? []).map(
+    (badge: any) => {
+      const definition =
+        basketBadges.find(
+          (item) =>
+            item.id === badge.claimed_badge_id &&
+            item.milestone === badge.claimed_milestone
+        );
+
+      return {
+        label:
+          definition?.label ??
+          badge.claimed_badge_id,
+        milestone:
+          badge.claimed_milestone,
+        xp:
+          badge.claimed_xp_awarded,
+      };
+    }
+  );
+
+const pendingXp =
+  pendingBasketXpByPlayer[player.id];
+
+if (pendingXp) {
+  const competitionWinXp =
+    basketCompetitionState.status === "finished" &&
+    basketCompetitionState.winner_team === player.basketTeam
+      ? BASKET_XP.competitionWin
+      : 0;
+
+  const finalBaseXp =
+    pendingXp.baseXp +
+    competitionWinXp;
+
+  const finalBadgeXp =
+    pendingXp.badgeXp +
+    basketBadgeXp;
+
+  const finalXpGain =
+    finalBaseXp +
+    finalBadgeXp;
+
+  const {
+    data: finalXpResult,
+    error: finalXpError,
+  } = await supabase.rpc(
+    "add_profile_xp_for_local_game_player",
+    {
+      p_game_id: createdGameId,
+      p_profile_id: player.linkedUserId,
+      p_xp_gain: finalXpGain,
+    }
+  );
+
+  if (finalXpError) {
+    console.error(
+      "Erreur ajout XP final Basket",
+      finalXpError
+    );
+  } else {
+    const result = Array.isArray(finalXpResult)
+      ? finalXpResult[0]
+      : finalXpResult;
+
+    if (result) {
+      const totalXpAfter =
+        result.total_xp;
+
+      const totalXpBefore =
+        totalXpAfter - result.xp_gained;
+
+      setXpResultsByPlayer((current) => ({
+        ...current,
+
+        [player.id]: {
+          xpGain: result.xp_gained,
+
+          oldLevel:
+            getLevelFromTotalXp(
+              totalXpBefore
+            ),
+
+          newLevel:
+            getLevelFromTotalXp(
+              totalXpAfter
+            ),
+
+          baseXp: finalBaseXp,
+
+          badgeXp: finalBadgeXp,
+
+          badges: [
+            ...pendingXp.badges,
+            ...newBasketBadges,
+          ],
+        },
+      }));
+
+      
+    }
+  }
+}
+  
+}
+  }
+}
     }
   }
 }
 }
-console.log("✅ Partie locale complètement sauvegardée");
+
 
 setFinishedGameSaved(true);
 
@@ -2510,24 +3458,24 @@ if (isLoadingCompetitionSet) {
 }
 async function checkSupabaseConnection() {
   if (isCheckingConnection) return;
-
+  
   setIsCheckingConnection(true);
-
+  
   try {
     const { error } = await supabase
-      .from("local_games")
-      .select("id")
-      .limit(1);
-
+    .from("local_games")
+    .select("id")
+    .limit(1);
+    
     if (error) {
       throw error;
     }
-
+    
     setIsOnline(true);
     wasOfflineRef.current = false;
     await reloadScoresFromSupabase();
     setShowReconnectedMessage(true);
-
+    
     window.setTimeout(() => {
       setShowReconnectedMessage(false);
     }, 3000);
@@ -2540,14 +3488,14 @@ async function checkSupabaseConnection() {
   }
 }
 const activeTournamentTheme = competitionLocalSet
-  ? competitionLocalSet.competitionType === "grand_prix"
-    ? getGrandPrixCircuitTheme(
-        competitionLocalSet.circuitId
-      )
-    : getTournamentTheme(
-        competitionLocalSet.theme
-      )
-  : null;
+? competitionLocalSet.competitionType === "grand_prix"
+? getGrandPrixCircuitTheme(
+  competitionLocalSet.circuitId
+)
+: getTournamentTheme(
+  competitionLocalSet.theme
+)
+: null;
 return (
   <main
   className={
@@ -2566,10 +3514,10 @@ return (
     onResumeGame={resumeGame}
     homeStats={homeStats}
     onProfile={() => router.push("/profile?tab=dashboard")}
-  onAchievements={() => router.push("/profile?tab=achievements")}
-  onHistory={() => router.push("/profile?tab=history")}
-  isLoggedIn={Boolean(currentUserId)}
- 
+    onAchievements={() => router.push("/profile?tab=achievements")}
+    onHistory={() => router.push("/profile?tab=history")}
+    isLoggedIn={Boolean(currentUserId)}
+    
     />
   )}
   {screen === "home" && (
@@ -2622,118 +3570,158 @@ return (
     viewportRef={viewportRef}
     sheetRef={sheetRef}
     highContrast={highContrast}
-setHighContrast={setHighContrast}
+    setHighContrast={setHighContrast}
     fitOffsetX={fitOffsetX}
     quitLabel={
-  competitionLocalSet
-    ? competitionLocalSet.competitionType === "world_cup"
+      competitionLocalSet
+      ? competitionLocalSet.competitionType === "world_cup" ||
+      competitionLocalSet.competitionType === "basket"
       ? "Quitter le match"
       : competitionLocalSet.competitionType === "grand_prix"
-        ? "Quitter le Grand Prix"
-        : "Quitter le set"
-    : "Quitter"
-}
+      ? "Quitter le Grand Prix"
+      : "Quitter le set"
+      : "Quitter"
+    }
     devFillRandomGame={fillRandomGame}
     competitionHeader={
-  !competitionLocalSet
-    ? null
-    : competitionLocalSet.competitionType === "grand_slam_final"
+      !competitionLocalSet
+      ? null
+      : competitionLocalSet.competitionType === "grand_slam_final"
       ? {
-          competitionId:
-            competitionLocalSet.competitionId,
-
-          competitionType: "grand_slam_final",
-
-          roundNumber:
-            competitionLocalSet.roundNumber,
-
-          roundLabel:
-            `Finale · Set ${competitionLocalSet.roundNumber}`,
-
-          theme:
-            competitionLocalSet.theme,
-
-          tournamentName:
-            competitionLocalSet.tournamentName,
-
-          player1SetsWon:
-            competitionLocalSet.player1SetsWon,
-
-          player2SetsWon:
-            competitionLocalSet.player2SetsWon,
-        }
+        competitionId:
+        competitionLocalSet.competitionId,
+        
+        competitionType: "grand_slam_final",
+        
+        roundNumber:
+        competitionLocalSet.roundNumber,
+        
+        roundLabel:
+        `Finale · Set ${competitionLocalSet.roundNumber}`,
+        
+        theme:
+        competitionLocalSet.theme,
+        
+        tournamentName:
+        competitionLocalSet.tournamentName,
+        
+        player1SetsWon:
+        competitionLocalSet.player1SetsWon,
+        
+        player2SetsWon:
+        competitionLocalSet.player2SetsWon,
+      }
       : competitionLocalSet.competitionType === "world_cup"
-        ? {
-            competitionId:
-              competitionLocalSet.competitionId,
-
-            competitionType: "world_cup",
-
-            roundNumber:
-              competitionLocalSet.roundNumber,
-
-            roundLabel:
-              getWorldCupRoundLabel(
-                competitionLocalSet.roundNumber,
-                competitionLocalSet.matchNumber
-              ),
-
-            theme: "world_cup",
-
-            tournamentName: "Coupe du Monde",
-
-            matchId:
-              competitionLocalSet.matchId,
-          }
-        : {
-            competitionId:
-              competitionLocalSet.competitionId,
-
-            competitionType: "grand_prix",
-
-            roundNumber:
-              competitionLocalSet.roundNumber,
-
-            roundLabel:
-              `Manche ${competitionLocalSet.roundNumber}`,
-
-            theme:
-              competitionLocalSet.theme,
-
-            tournamentName:
-              competitionLocalSet.tournamentName,
-
-            circuitId:
-              competitionLocalSet.circuitId,
-          }
-}
+      ? {
+        competitionId:
+        competitionLocalSet.competitionId,
+        
+        competitionType: "world_cup",
+        
+        roundNumber:
+        competitionLocalSet.roundNumber,
+        
+        roundLabel:
+        getWorldCupRoundLabel(
+          competitionLocalSet.roundNumber,
+          competitionLocalSet.matchNumber
+        ),
+        
+        theme: "world_cup",
+        
+        tournamentName: "Coupe du Monde",
+        
+        matchId:
+        competitionLocalSet.matchId,
+      }
+      
+      : competitionLocalSet.competitionType === "basket"
+      ? {
+        competitionId:
+        competitionLocalSet.competitionId,
+        
+        competitionType: "basket",
+        
+        roundNumber:
+        competitionLocalSet.roundNumber,
+        
+        roundLabel:
+        `Match ${competitionLocalSet.roundNumber}`,
+        
+        theme: "basket",
+        currentQuarterTeamAScore:
+        basketQuarter && basketQuarterScores
+        ? basketQuarterScores[basketQuarter].teamA
+        : 0,
+        
+        currentQuarterTeamBScore:
+        basketQuarter && basketQuarterScores
+        ? basketQuarterScores[basketQuarter].teamB
+        : 0,
+        tournamentName: "Basket",
+        
+        currentQuarter:
+        basketQuarter,
+        
+        teamAPoints:
+        basketQuarterPoints?.teamA ?? 0,
+        
+        teamBPoints:
+        basketQuarterPoints?.teamB ?? 0,
+      }
+      
+      : {
+        competitionId:
+        competitionLocalSet.competitionId,
+        
+        competitionType: "grand_prix",
+        
+        roundNumber:
+        competitionLocalSet.roundNumber,
+        
+        roundLabel:
+        `Manche ${competitionLocalSet.roundNumber}`,
+        
+        theme:
+        competitionLocalSet.theme,
+        
+        tournamentName:
+        competitionLocalSet.tournamentName,
+        
+        circuitId:
+        competitionLocalSet.circuitId,
+      }
+    }
     onBackToCompetition={
-  competitionLocalSet
-    ? () => {
+      competitionLocalSet
+      ? () => {
         let competitionRoute: string;
-
+        
         switch (competitionLocalSet.competitionType) {
           case "world_cup":
-            competitionRoute =
-              `/modes-speciaux/coupe-du-monde/${competitionLocalSet.competitionId}`;
-            break;
-
+          competitionRoute =
+          `/modes-speciaux/coupe-du-monde/${competitionLocalSet.competitionId}`;
+          break;
+          case "basket":
+          competitionRoute =
+          `/modes-speciaux/basket/${competitionLocalSet.competitionId}`;
+          break;
           case "grand_prix":
-            competitionRoute =
-              `/modes-speciaux/grand-prix/${competitionLocalSet.competitionId}`;
-            break;
-
+          competitionRoute =
+          `/modes-speciaux/grand-prix/${competitionLocalSet.competitionId}`;
+          break;
+          
           case "grand_slam_final":
           default:
-            competitionRoute =
-              `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}`;
-            break;
+          competitionRoute =
+          `/modes-speciaux/grand-chelem/${competitionLocalSet.competitionId}`;
+          break;
         }
-
+        
         router.push(competitionRoute);
       }
-    : undefined
-}
+      : undefined
+    }
     fitScale={fitScale}
     players={players}
     PlayerSheetComponent={PlayerSheet}
@@ -2768,201 +3756,225 @@ setHighContrast={setHighContrast}
     />
   )}
   {showReconnectedMessage && (
-  <div className="fixed left-1/2 top-5 z-[110] -translate-x-1/2 rounded-xl border border-emerald-500 bg-black px-5 py-3 font-black text-emerald-300 shadow-2xl">
+    <div className="fixed left-1/2 top-5 z-[110] -translate-x-1/2 rounded-xl border border-emerald-500 bg-black px-5 py-3 font-black text-emerald-300 shadow-2xl">
     ✓ Connexion rétablie
-  </div>
-)}
-  {screen === "game" && currentLocalGameId && !isOnline && (
-  <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-4">
-    <div className="w-full max-w-md rounded-3xl border border-red-500 bg-black p-6 text-center shadow-2xl">
-      <div className="text-5xl">📡</div>
-
-      <div className="mt-3 text-sm font-black uppercase tracking-wider text-red-400">
-        Connexion perdue
-      </div>
-
-      <h2 className="mt-1 text-3xl font-black text-white">
-        Partie mise en pause
-      </h2>
-
-      <p className="mt-3 text-sm font-bold text-slate-300">
-        Aucun nouveau score ne peut être enregistré tant que la connexion
-        n’est pas revenue.
-      </p>
-
-      <div className="mt-5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-black text-red-300">
-        Les scores déjà confirmés restent sauvegardés.
-      </div>
-      <button
-  type="button"
-  onClick={checkSupabaseConnection}
-  disabled={isCheckingConnection}
-  className="mt-5 w-full rounded-xl bg-red-500 px-4 py-3 font-black text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
->
-  {isCheckingConnection
-    ? "Vérification en cours..."
-    : "Réessayer la connexion"}
-</button>
     </div>
-  </div>
-)}
-  {selectedCell && (
-  <ScoreModal
-    scoreInput={scoreInput}
-    setScoreInput={setScoreInput}
-    scoreOptions={scoreOptions}
-    selectedCell={selectedCell}
-    saveScore={saveScore}
-    clearScore={clearScore}
-    closeModal={closeModal}
-    isValidScoreForRow={isValidScoreForRow}
-    isSavingScore={isSavingScore}
-    isOnline={isOnline}
-    requiresOnlineSave={Boolean(currentLocalGameId)}
-    tournamentTheme={activeTournamentTheme}
-  />
-)}
-  {showVictoryModal && gameFinished && (
-    <VictoryModal
-    players={getLeaderboard()}
-    onViewGrid={() => setShowVictoryModal(false)}
-    xpResults={xpResultsByPlayer}
-    isFinalizing={!finishedGameSaved}
-    tournamentTheme={activeTournamentTheme}
-    onBackHome={
-  competitionLocalSet
-    ? () => {
-        localStorage.removeItem(STORAGE_KEY);
-
-        let competitionRoute: string;
-
-        switch (competitionLocalSet.competitionType) {
-          case "world_cup":
-            competitionRoute =
-              `/modes-speciaux/coupe-du-monde/` +
-              `${competitionLocalSet.competitionId}` +
-              `${
-                competitionFinishResult?.competition_finished
-                  ? "?victory=1"
-                  : ""
-              }`;
-            break;
-
-          case "grand_prix":
-            competitionRoute =
-              `/modes-speciaux/grand-prix/` +
-              `${competitionLocalSet.competitionId}` +
-              `${
-                competitionFinishResult?.competition_finished
-                  ? "?victory=1"
-                  : ""
-              }`;
-            break;
-
-          case "grand_slam_final":
-          default:
-            competitionRoute =
-              `/modes-speciaux/grand-chelem/` +
-              `${competitionLocalSet.competitionId}` +
-              `${
-                competitionFinishResult?.competition_finished
-                  ? "?victory=1"
-                  : ""
-              }`;
-            break;
-        }
-
-        router.push(competitionRoute);
-      }
-    : newGameFromVictory
-}
-    competitionType={
-      competitionLocalSet?.competitionType ?? null
-    }
-    competitionFinished={
-      competitionFinishResult?.competition_finished ?? false
-    }
-    />
   )}
-  {showQuitModal && (
-    <QuitModal
-    onCancel={() => setShowQuitModal(false)}
-    onConfirm={confirmQuitGame}
-    quitLabel={quitLabel}
-    tournamentTheme={tournamentTheme}
-    />
-  )}
-  {pendingCell && (
-    <WrongPlayerModal
-    onCancel={() => setPendingCell(null)}
-    onConfirm={() => {
-      setSelectedCell(pendingCell);
-      setPendingCell(null);
-    }}
-    />
-  )}
-  {showNewGameWarning && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
-    <div className="w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-6 text-center shadow-2xl">
+  {screen === "game" && currentLocalGameId && !isOnline && (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 px-4">
+    <div className="w-full max-w-md rounded-3xl border border-red-500 bg-black p-6 text-center shadow-2xl">
+    <div className="text-5xl">📡</div>
     
-    <div className="text-5xl">💾</div>
-    
-    <div className="mt-3 text-sm font-black uppercase text-[#C44934]">
-    Sauvegarde détectée
+    <div className="mt-3 text-sm font-black uppercase tracking-wider text-red-400">
+    Connexion perdue
     </div>
     
     <h2 className="mt-1 text-3xl font-black text-white">
-    Reprendre une partie ?
+    Partie mise en pause
     </h2>
     
-    <div className="mt-6 rounded-2xl bg-[#F4E9DC] p-5 text-black">
-    <div className="flex justify-between font-black">
-    <span>👥 Joueurs</span>
-    <span>{savedGameInfo?.playerCount}</span>
-    </div>
-    
-    <div className="mt-3 flex justify-between font-black">
-    <span>🎲 Mode</span>
-    <span>{savedGameInfo?.mode}</span>
-    </div>
-    
-    <div className="mt-3 flex justify-between font-black">
-    <span>⏳ Tours restants</span>
-    <span>{savedGameInfo?.remainingTurns}</span>
-    </div>
-    </div>
-    
-    <p className="mt-5 text-sm font-bold text-slate-400">
-    Commencer une nouvelle partie supprimera cette sauvegarde.
+    <p className="mt-3 text-sm font-bold text-slate-300">
+    Aucun nouveau score ne peut être enregistré tant que la connexion
+    n’est pas revenue.
     </p>
     
-    <div className="mt-6 grid grid-cols-2 gap-3">
+    <div className="mt-5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-black text-red-300">
+    Les scores déjà confirmés restent sauvegardés.
+    </div>
     <button
-    onClick={() => setShowNewGameWarning(false)}
-    className="rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
+    type="button"
+    onClick={checkSupabaseConnection}
+    disabled={isCheckingConnection}
+    className="mt-5 w-full rounded-xl bg-red-500 px-4 py-3 font-black text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-50"
     >
-    Annuler
-    </button>
-    
-    <button
-    onClick={() => {
-      localStorage.removeItem(STORAGE_KEY);
-      setHasSavedGame(false);
-      setShowNewGameWarning(false);
-      setScreen("setup");
-      setSavedGameInfo(null);
-    }}
-    className="rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
-    >
-    Nouvelle partie
-    </button>
-    </div>
-    
-    </div>
-    </div>
+    {isCheckingConnection
+      ? "Vérification en cours..."
+      : "Réessayer la connexion"}
+      </button>
+      </div>
+      </div>
+    )}
+    {selectedCell && (
+      <ScoreModal
+      scoreInput={scoreInput}
+      setScoreInput={setScoreInput}
+      scoreOptions={scoreOptions}
+      selectedCell={selectedCell}
+      saveScore={saveScore}
+      clearScore={clearScore}
+      closeModal={closeModal}
+      isValidScoreForRow={isValidScoreForRow}
+      isSavingScore={isSavingScore}
+      isOnline={isOnline}
+      requiresOnlineSave={Boolean(currentLocalGameId)}
+      tournamentTheme={activeTournamentTheme}
+      />
+    )}
+    {showBasketQuarterModal &&
+  finishedBasketQuarter &&
+  basketQuarterScores && (
+    <BasketQuarterModal
+      quarter={finishedBasketQuarter}
+      scores={
+        basketQuarterScores[
+          finishedBasketQuarter
+        ]
+      }
+      onContinue={() => {
+        setShowBasketQuarterModal(false);
+        setFinishedBasketQuarter(null);
+      }}
+    />
   )}
-  </main>
-);
+    {showVictoryModal && gameFinished && (
+      <VictoryModal
+      players={getLeaderboard()}
+      onViewGrid={() => setShowVictoryModal(false)}
+      xpResults={xpResultsByPlayer}
+      isFinalizing={!finishedGameSaved}
+      tournamentTheme={activeTournamentTheme}
+      basketQuarterScores={basketQuarterScores}
+basketPoints={basketQuarterPoints}
+      onBackHome={
+        competitionLocalSet
+        ? () => {
+          localStorage.removeItem(STORAGE_KEY);
+          
+          let competitionRoute: string;
+          
+          switch (competitionLocalSet.competitionType) {
+            case "world_cup":
+            competitionRoute =
+            `/modes-speciaux/coupe-du-monde/` +
+            `${competitionLocalSet.competitionId}` +
+            `${
+              competitionFinishResult?.competition_finished
+              ? "?victory=1"
+              : ""
+            }`;
+            break;
+            
+            case "basket":
+            competitionRoute =
+            `/modes-speciaux/basket/` +
+            `${competitionLocalSet.competitionId}`;
+            break;
+            
+            case "grand_prix":
+            competitionRoute =
+            `/modes-speciaux/grand-prix/` +
+            `${competitionLocalSet.competitionId}` +
+            `${
+              competitionFinishResult?.competition_finished
+              ? "?victory=1"
+              : ""
+            }`;
+            break;
+            
+            case "grand_slam_final":
+            default:
+            competitionRoute =
+            `/modes-speciaux/grand-chelem/` +
+            `${competitionLocalSet.competitionId}` +
+            `${
+              competitionFinishResult?.competition_finished
+              ? "?victory=1"
+              : ""
+            }`;
+            break;
+          }
+          
+          router.push(competitionRoute);
+        }
+        : newGameFromVictory
+      }
+      competitionType={
+        competitionLocalSet?.competitionType ?? null
+      }
+      competitionFinished={
+        competitionFinishResult?.competition_finished ?? false
+      }
+      />
+    )}
+    {showQuitModal && (
+      <QuitModal
+      onCancel={() => setShowQuitModal(false)}
+      onConfirm={confirmQuitGame}
+      quitLabel={quitLabel}
+      tournamentTheme={tournamentTheme}
+      />
+    )}
+    {pendingCell && (
+      <WrongPlayerModal
+      onCancel={() => setPendingCell(null)}
+      onConfirm={() => {
+        setSelectedCell(pendingCell);
+        setPendingCell(null);
+      }}
+      />
+    )}
+    {showNewGameWarning && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
+      <div className="w-full max-w-md rounded-3xl border border-[#9B6A28]/70 bg-black p-6 text-center shadow-2xl">
+      
+      <div className="text-5xl">💾</div>
+      
+      <div className="mt-3 text-sm font-black uppercase text-[#C44934]">
+      Sauvegarde détectée
+      </div>
+      
+      <h2 className="mt-1 text-3xl font-black text-white">
+      Reprendre une partie ?
+      </h2>
+      
+      <div className="mt-6 rounded-2xl bg-[#F4E9DC] p-5 text-black">
+      <div className="flex justify-between font-black">
+      <span>👥 Joueurs</span>
+      <span>{savedGameInfo?.playerCount}</span>
+      </div>
+      
+      <div className="mt-3 flex justify-between font-black">
+      <span>🎲 Mode</span>
+      <span>{savedGameInfo?.mode}</span>
+      </div>
+      
+      <div className="mt-3 flex justify-between font-black">
+      <span>⏳ Tours restants</span>
+      <span>{savedGameInfo?.remainingTurns}</span>
+      </div>
+      </div>
+      
+      <p className="mt-5 text-sm font-bold text-slate-400">
+      Commencer une nouvelle partie supprimera cette sauvegarde.
+      </p>
+      
+      <div className="mt-6 grid grid-cols-2 gap-3">
+      <button
+      onClick={() => setShowNewGameWarning(false)}
+      className="rounded-xl bg-[#241A13] px-4 py-3 font-black text-white hover:bg-[#322217]"
+      >
+      Annuler
+      </button>
+      
+      <button
+      onClick={() => {
+        localStorage.removeItem(STORAGE_KEY);
+        setHasSavedGame(false);
+        setShowNewGameWarning(false);
+        setScreen("setup");
+        setSavedGameInfo(null);
+      }}
+      className="rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
+      >
+      Nouvelle partie
+      </button>
+      </div>
+      
+      </div>
+      </div>
+    )}
+    </main>
+  );
 }
 function WrongPlayerModal({
   onCancel,
@@ -3007,6 +4019,112 @@ function WrongPlayerModal({
     </div>
   );
 }
+function BasketQuarterModal({
+  quarter,
+  scores,
+  onContinue,
+}: {
+  quarter: 1 | 2 | 3;
+  scores: {
+    teamA: number;
+    teamB: number;
+  };
+  onContinue: () => void;
+}) {
+  const winner =
+    scores.teamA > scores.teamB
+      ? "A"
+      : scores.teamB > scores.teamA
+        ? "B"
+        : null;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 px-4">
+      <div
+        className="w-full max-w-md rounded-3xl border p-6 text-center text-white shadow-2xl"
+        style={{
+          borderColor:
+            "rgba(232,117,36,0.7)",
+          background:
+            "linear-gradient(180deg, #211008 0%, #0D0906 100%)",
+        }}
+      >
+        <div className="text-5xl">
+          🏀
+        </div>
+
+        <p className="mt-4 text-xs font-black uppercase tracking-[0.28em] text-white/50">
+          Fin du quart-temps
+        </p>
+
+        <h2 className="mt-1 text-4xl font-black">
+          Q{quarter}
+        </h2>
+
+        <div className="mt-6 flex items-center justify-center gap-6">
+          <div>
+            <p
+              className="text-xs font-black uppercase"
+              style={{ color: "#F47B20" }}
+            >
+              Équipe A
+            </p>
+
+            <p className="mt-1 text-4xl font-black">
+              {scores.teamA}
+            </p>
+          </div>
+
+          <span className="text-xl font-black text-white/25">
+            -
+          </span>
+
+          <div>
+            <p
+              className="text-xs font-black uppercase"
+              style={{ color: "#3B82F6" }}
+            >
+              Équipe B
+            </p>
+
+            <p className="mt-1 text-4xl font-black">
+              {scores.teamB}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+          {winner ? (
+            <>
+              <p className="font-black">
+                Équipe {winner} remporte le quart-temps
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-white/50">
+                +1 point Basket
+              </p>
+            </>
+          ) : (
+            <p className="font-black">
+              Quart-temps à égalité
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onContinue}
+          className="mt-6 w-full rounded-xl px-5 py-3 font-black text-white transition hover:brightness-110"
+          style={{
+            backgroundColor: "#F47B20",
+          }}
+        >
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}
 function QuitModal({
   onCancel,
   onConfirm,
@@ -3019,24 +4137,24 @@ function QuitModal({
   tournamentTheme?: TournamentThemeConfig | null;
 }) {
   const isWorldCup = quitLabel === "Quitter le match";
-const isGrandSlam = quitLabel === "Quitter le set";
-const isGrandPrix = quitLabel === "Quitter le Grand Prix";
-
-const title = isWorldCup
+  const isGrandSlam = quitLabel === "Quitter le set";
+  const isGrandPrix = quitLabel === "Quitter le Grand Prix";
+  
+  const title = isWorldCup
   ? "Quitter le match ?"
   : isGrandSlam
-    ? "Quitter le set ?"
-    : isGrandPrix
-      ? "Quitter le Grand Prix ?"
-      : "Quitter la partie ?";
-
-const description = isWorldCup
+  ? "Quitter le set ?"
+  : isGrandPrix
+  ? "Quitter le Grand Prix ?"
+  : "Quitter la partie ?";
+  
+  const description = isWorldCup
   ? "Le match sera sauvegardé et tu reviendras au tableau de la Coupe du Monde."
   : isGrandSlam
-    ? "Le set sera sauvegardé et tu reviendras à la finale."
-    : isGrandPrix
-      ? "Le Grand Prix sera sauvegardé et tu reviendras à la saison."
-      : "La partie sera sauvegardée et tu reviendras au menu principal.";
+  ? "Le set sera sauvegardé et tu reviendras à la finale."
+  : isGrandPrix
+  ? "Le Grand Prix sera sauvegardé et tu reviendras à la saison."
+  : "La partie sera sauvegardée et tu reviendras au menu principal.";
   
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4">
@@ -3056,30 +4174,30 @@ const description = isWorldCup
     }
     >
     {tournamentTheme && (
-  <div className="mb-4 flex justify-center">
-    {tournamentTheme.flagImage ? (
-      <Image
+      <div className="mb-4 flex justify-center">
+      {tournamentTheme.flagImage ? (
+        <Image
         src={tournamentTheme.flagImage}
         alt={`Drapeau — ${tournamentTheme.name}`}
         width={72}
         height={48}
         className="h-12 w-auto rounded object-contain shadow-xl"
-      />
-    ) : tournamentTheme.headerLogo ? (
-      <Image
+        />
+      ) : tournamentTheme.headerLogo ? (
+        <Image
         src={tournamentTheme.headerLogo}
         alt={tournamentTheme.name}
         width={72}
         height={72}
         className="h-20 w-auto object-contain drop-shadow-xl"
-      />
-    ) : (
-      <div className="text-5xl">
+        />
+      ) : (
+        <div className="text-5xl">
         {tournamentTheme.icon}
+        </div>
+      )}
       </div>
     )}
-  </div>
-)}
     
     {!tournamentTheme && (
       <div className="text-4xl">⚠️</div>
@@ -3122,14 +4240,14 @@ const description = isWorldCup
     type="button"
     onClick={onConfirm}
     className="rounded-xl border px-4 py-3 font-black text-white transition hover:brightness-110"
-style={
-  tournamentTheme?.sheet
-    ? {
+    style={
+      tournamentTheme?.sheet
+      ? {
         backgroundColor: tournamentTheme.sheet.finalBackground,
         borderColor: tournamentTheme.sheet.finalBackground,
       }
-    : undefined
-}
+      : undefined
+    }
     >
     {quitLabel}
     </button>
@@ -3643,8 +4761,8 @@ function ScoreModal({
   isValidScoreForRow,
   tournamentTheme,
   isSavingScore,
-isOnline,
-requiresOnlineSave,
+  isOnline,
+  requiresOnlineSave,
 }: {
   scoreInput: string;
   setScoreInput: (value: string) => void;
@@ -3680,111 +4798,112 @@ requiresOnlineSave,
   
   const isCompetition = Boolean(tournamentTheme);
   const sheetTheme = tournamentTheme?.sheet ?? null;
-
-const modalBackground =
+  const isBasketTheme =
+  tournamentTheme?.id === "basket";
+  const modalBackground =
   sheetTheme?.cardBackground ?? null;
-
-const modalBorderColor =
+  
+  const modalBorderColor =
   sheetTheme?.cardBorder ?? null;
-
-const modalAccentColor =
+  
+  const modalAccentColor =
   sheetTheme?.activeText ?? null;
-
-const modalTextColor =
+  
+  const modalTextColor =
   sheetTheme?.totalText ?? null;
   const competitionButtonClasses = tournamentTheme
   ? `${tournamentTheme.buttonBackground} ${tournamentTheme.buttonHover} ${tournamentTheme.buttonText}`
   : "";
   
   async function validateManualScore() {
-  if (isSavingScore) return;
-
-  if (requiresOnlineSave && !isOnline) {
-    setErrorMessage(
-      "Connexion perdue. Le score ne peut pas être enregistré."
-    );
-    return;
-  }
-
-  const value = Number(scoreInput);
-
-  if (Number.isNaN(value)) return;
-
-  if (!isValidScoreForRow(selectedCell.rowId, value)) {
-    setErrorMessage("Score impossible pour cette case.");
-    return;
-  }
-
-  setErrorMessage("");
-
-  const saved = await saveScore(value);
-
-  if (!saved) {
-    setErrorMessage(
-      navigator.onLine
+    if (isSavingScore) return;
+    
+    if (requiresOnlineSave && !isOnline) {
+      setErrorMessage(
+        "Connexion perdue. Le score ne peut pas être enregistré."
+      );
+      return;
+    }
+    
+    const value = Number(scoreInput);
+    
+    if (Number.isNaN(value)) return;
+    
+    if (!isValidScoreForRow(selectedCell.rowId, value)) {
+      setErrorMessage("Score impossible pour cette case.");
+      return;
+    }
+    
+    setErrorMessage("");
+    
+    const saved = await saveScore(value);
+    
+    if (!saved) {
+      setErrorMessage(
+        navigator.onLine
         ? "Impossible d’enregistrer le score. Réessaie dans quelques secondes."
         : "Connexion perdue. Le score n’a pas été enregistré."
-    );
+      );
+    }
   }
-}
-async function handleClearScore() {
-  if (isSavingScore) return;
-
-  if (requiresOnlineSave && !isOnline) {
-    setErrorMessage(
-      "Connexion perdue. Le score ne peut pas être supprimé."
-    );
-    return;
-  }
-
-  setErrorMessage("");
-
-  const cleared = await clearScore();
-
-  if (!cleared) {
-    setErrorMessage(
-      navigator.onLine
+  async function handleClearScore() {
+    if (isSavingScore) return;
+    
+    if (requiresOnlineSave && !isOnline) {
+      setErrorMessage(
+        "Connexion perdue. Le score ne peut pas être supprimé."
+      );
+      return;
+    }
+    
+    setErrorMessage("");
+    
+    const cleared = await clearScore();
+    
+    if (!cleared) {
+      setErrorMessage(
+        navigator.onLine
         ? "Impossible de supprimer le score. Réessaie dans quelques secondes."
         : "Connexion perdue. Le score n’a pas été supprimé."
-    );
+      );
+    }
   }
-}
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4">
     <div
-  className={[
-    "overflow-hidden rounded-3xl border p-6 shadow-2xl",
-    isPlusMinus ? "w-full max-w-[520px]" : "w-full max-w-sm",
-
-    isCompetition && !sheetTheme
+    className={[
+      "overflow-hidden rounded-3xl border p-6 shadow-2xl",
+      isPlusMinus ? "w-full max-w-[520px]" : "w-full max-w-sm",
+      
+      isCompetition && !sheetTheme
       ? `${tournamentTheme?.border} bg-[#F4E9DC]`
       : !isCompetition
-        ? "border-[#9B6A28]/60 bg-black"
-        : "",
-  ].join(" ")}
-  style={
-    sheetTheme
+      ? "border-[#9B6A28]/60 bg-black"
+      : "",
+    ].join(" ")}
+    style={
+      sheetTheme
       ? {
-          background: modalBackground ?? undefined,
-          borderColor: modalBorderColor ?? undefined,
-        }
+        background: modalBackground ?? undefined,
+        borderColor: modalBorderColor ?? undefined,
+      }
       : undefined
-  }
->
+    }
+    >
     <div className="mb-5 text-center">
     <div
-  className={[
-    "text-xs font-black uppercase tracking-wider",
-    modalAccentColor
+    className={[
+      "text-xs font-black uppercase tracking-wider",
+      modalAccentColor
       ? ""
       : isCompetition
-        ? tournamentTheme?.accentDarkText
-        : "text-[#C44934]",
-  ].join(" ")}
-  style={{
-    color: modalAccentColor ?? undefined,
-  }}
->
+      ? tournamentTheme?.accentDarkText
+      : "text-[#C44934]",
+    ].join(" ")}
+    style={{
+      color: modalAccentColor ?? undefined,
+    }}
+    >
     {columnLabel}
     </div>
     
@@ -3818,65 +4937,65 @@ async function handleClearScore() {
         <button
         key={option}
         onClick={async () => {
-  if (isSavingScore) return;
-
-  if (requiresOnlineSave && !isOnline) {
-    setErrorMessage(
-      "Connexion perdue. Le score ne peut pas être enregistré."
-    );
-    return;
-  }
-
-  setErrorMessage("");
-
-  const saved =
-    option === "X"
-      ? await saveScore("X")
-      : await saveScore(option);
-
-  if (!saved) {
-    setErrorMessage(
-      navigator.onLine
-        ? "Impossible d’enregistrer le score. Réessaie dans quelques secondes."
-        : "Connexion perdue. Le score n’a pas été enregistré."
-    );
-  }
-}}
- disabled={
-    isSavingScore ||
-    (requiresOnlineSave && !isOnline)
-  }
-  className={[
-    "disabled:cursor-not-allowed disabled:opacity-40",
-    "min-h-14 rounded-xl border px-4 py-3 text-xl font-black transition",
-
-    option === "X"
-  ? isCompetition
-    ? sheetTheme
-      ? "border text-white hover:brightness-110"
-      : `${competitionButtonClasses} ${tournamentTheme?.border}`
-    : "border-[#C44934] bg-[#C44934] text-white hover:bg-[#D75A43]"
-      : isCompetition
-        ? sheetTheme
+          if (isSavingScore) return;
+          
+          if (requiresOnlineSave && !isOnline) {
+            setErrorMessage(
+              "Connexion perdue. Le score ne peut pas être enregistré."
+            );
+            return;
+          }
+          
+          setErrorMessage("");
+          
+          const saved =
+          option === "X"
+          ? await saveScore("X")
+          : await saveScore(option);
+          
+          if (!saved) {
+            setErrorMessage(
+              navigator.onLine
+              ? "Impossible d’enregistrer le score. Réessaie dans quelques secondes."
+              : "Connexion perdue. Le score n’a pas été enregistré."
+            );
+          }
+        }}
+        disabled={
+          isSavingScore ||
+          (requiresOnlineSave && !isOnline)
+        }
+        className={[
+          "disabled:cursor-not-allowed disabled:opacity-40",
+          "min-h-14 rounded-xl border px-4 py-3 text-xl font-black transition",
+          
+          option === "X"
+          ? isCompetition
+          ? sheetTheme
+          ? "border text-white hover:brightness-110"
+          : `${competitionButtonClasses} ${tournamentTheme?.border}`
+          : "border-[#C44934] bg-[#C44934] text-white hover:bg-[#D75A43]"
+          : isCompetition
+          ? sheetTheme
           ? "border bg-white/70 text-[#241812] hover:bg-white"
           : "border-[#CFAF95] bg-[#FFF8EF] text-[#241812] hover:bg-white"
-        : "border-transparent bg-[#F4E9DC] text-black hover:bg-[#FFF8EF]",
-  ].join(" ")}
-  style={
-  isCompetition && sheetTheme
-    ? option === "X"
-      ? {
-          backgroundColor: sheetTheme.finalBackground,
-          borderColor: sheetTheme.finalBackground,
+          : "border-transparent bg-[#F4E9DC] text-black hover:bg-[#FFF8EF]",
+        ].join(" ")}
+        style={
+          isCompetition && sheetTheme
+          ? option === "X"
+          ? {
+            backgroundColor: sheetTheme.finalBackground,
+            borderColor: sheetTheme.finalBackground,
+          }
+          : {
+            borderColor: `${sheetTheme.cardBorder}55`,
+          }
+          : undefined
         }
-      : {
-          borderColor: `${sheetTheme.cardBorder}55`,
-        }
-    : undefined
-}
->
-  {option}
-</button>
+        >
+        {option}
+        </button>
       ))}
       </div>
     )}
@@ -3894,20 +5013,20 @@ async function handleClearScore() {
       setErrorMessage("");
     }}
     className={[
-  "w-full rounded-xl border bg-[#FFF8EF] p-3 text-center text-2xl font-black text-black outline-none",
-  isCompetition
-    ? sheetTheme
+      "w-full rounded-xl border bg-[#FFF8EF] p-3 text-center text-2xl font-black text-black outline-none",
+      isCompetition
+      ? sheetTheme
       ? ""
       : tournamentTheme?.border
-    : "border-[#9B6A28]/50 focus:border-[#C44934]",
-].join(" ")}
-style={
-  sheetTheme
-    ? {
+      : "border-[#9B6A28]/50 focus:border-[#C44934]",
+    ].join(" ")}
+    style={
+      sheetTheme
+      ? {
         borderColor: sheetTheme.cardBorder,
       }
-    : undefined
-}
+      : undefined
+    }
     placeholder="Score manuel"
     autoFocus
     />
@@ -3922,25 +5041,25 @@ style={
     <button
     onClick={validateManualScore}
     disabled={
-  isSavingScore ||
-  (requiresOnlineSave && !isOnline)
-}
+      isSavingScore ||
+      (requiresOnlineSave && !isOnline)
+    }
     className={[
-  "disabled:cursor-not-allowed disabled:opacity-40",
-  "rounded-xl py-3 font-black text-white transition",
-  isCompetition
-    ? sheetTheme
+      "disabled:cursor-not-allowed disabled:opacity-40",
+      "rounded-xl py-3 font-black text-white transition",
+      isCompetition
+      ? sheetTheme
       ? "hover:brightness-110"
       : competitionButtonClasses
-    : "bg-[#C44934] hover:bg-[#D75A43]",
-].join(" ")}
-style={
-  isCompetition && sheetTheme
-    ? {
+      : "bg-[#C44934] hover:bg-[#D75A43]",
+    ].join(" ")}
+    style={
+      isCompetition && sheetTheme
+      ? {
         backgroundColor: sheetTheme.finalBackground,
       }
-    : undefined
-}
+      : undefined
+    }
     >
     {isSavingScore ? "Enregistrement..." : "✓ Valider"}
     </button>
@@ -3948,23 +5067,23 @@ style={
     <button
     onClick={handleClearScore}
     disabled={
-  isSavingScore ||
-  (requiresOnlineSave && !isOnline)
-}
-style={
-  sheetTheme
-    ? {
+      isSavingScore ||
+      (requiresOnlineSave && !isOnline)
+    }
+    style={
+      sheetTheme
+      ? {
         borderColor: `${sheetTheme.cardBorder}66`,
       }
-    : undefined
-}
+      : undefined
+    }
     className={[
       "disabled:cursor-not-allowed disabled:opacity-40",
       "rounded-xl py-3 font-black transition",
       isCompetition
       ? sheetTheme
-  ? "border bg-white/45 text-[#241812] hover:bg-white/65"
-  : "border border-[#CFAF95] bg-[#E8D8C5] text-[#241812] hover:bg-[#F1E4D5]"
+      ? "border bg-white/45 text-[#241812] hover:bg-white/65"
+      : "border border-[#CFAF95] bg-[#E8D8C5] text-[#241812] hover:bg-[#F1E4D5]"
       : "bg-[#241A13] text-white hover:bg-[#322217]",
     ].join(" ")}
     >
@@ -3973,21 +5092,23 @@ style={
     
     <button
     style={
-  sheetTheme
-    ? {
+      sheetTheme
+      ? {
         borderColor: `${sheetTheme.cardBorder}66`,
-        color: modalTextColor ?? "#6B584A",
+        color: isBasketTheme
+        ? "#241812"
+        : modalTextColor ?? "#6B584A",
       }
-    : undefined
-}
+      : undefined
+    }
     onClick={closeModal}
     disabled={isSavingScore}
     className={[
       "rounded-xl border py-3 font-black transition",
       isCompetition
-  ? sheetTheme
-    ? "hover:bg-white/35"
-    : "border-[#CFAF95] text-[#6B584A] hover:bg-[#E8D8C5]"
+      ? sheetTheme
+      ? "hover:bg-white/35"
+      : "border-[#CFAF95] text-[#6B584A] hover:bg-[#E8D8C5]"
       : "border-[#9B6A28]/40 text-slate-300 hover:bg-[#241A13]",
     ].join(" ")}
     >
@@ -4019,11 +5140,11 @@ function HomeMenu({
     playerCount: number;
     mode: string;
     remainingTurns: number;
-   
+    
   } | null;
   onResumeGame: () => void;
   homeStats: HomeStats | null;
-   onProfile: () => void;
+  onProfile: () => void;
   onAchievements: () => void;
   onHistory: () => void;
   isLoggedIn: boolean;
@@ -4069,383 +5190,383 @@ function HomeMenu({
     Le compteur de score ultime pour tes parties de Yam.
     </p>
     {homeStats && (
-  <div className="mt-6 grid w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#101010]/90 shadow-2xl sm:grid-cols-3">
-    {/* Parties */}
-    <div className="flex min-h-[78px] items-center justify-center gap-3 px-5 py-4">
+      <div className="mt-6 grid w-full max-w-3xl overflow-hidden rounded-2xl border border-white/10 bg-[#101010]/90 shadow-2xl sm:grid-cols-3">
+      {/* Parties */}
+      <div className="flex min-h-[78px] items-center justify-center gap-3 px-5 py-4">
       <span className="text-2xl">🎲</span>
-
+      
       <span className="text-base font-black text-white">
-        {homeStats.gamesPlayed}{" "}
-        {homeStats.gamesPlayed > 1 ? "parties" : "partie"}
+      {homeStats.gamesPlayed}{" "}
+      {homeStats.gamesPlayed > 1 ? "parties" : "partie"}
       </span>
-    </div>
-
-    {/* Victoires */}
-    <div className="flex min-h-[78px] items-center justify-center gap-3 border-t border-white/10 px-5 py-4 sm:border-l sm:border-t-0">
+      </div>
+      
+      {/* Victoires */}
+      <div className="flex min-h-[78px] items-center justify-center gap-3 border-t border-white/10 px-5 py-4 sm:border-l sm:border-t-0">
       <span className="text-2xl">🏆</span>
-
+      
       <div className="flex flex-col items-start">
-        <span className="text-base font-black leading-none text-white">
-          {homeStats.winRate} % de victoires
-        </span>
-
-        <span className="mt-2 text-xs font-bold text-slate-500">
-          Parties à 2 joueurs et +
-        </span>
+      <span className="text-base font-black leading-none text-white">
+      {homeStats.winRate} % de victoires
+      </span>
+      
+      <span className="mt-2 text-xs font-bold text-slate-500">
+      Parties à 2 joueurs et +
+      </span>
       </div>
-    </div>
-
-    {/* Série */}
-    <div className="flex min-h-[78px] items-center justify-center gap-3 border-t border-white/10 px-5 py-4 sm:border-l sm:border-t-0">
+      </div>
+      
+      {/* Série */}
+      <div className="flex min-h-[78px] items-center justify-center gap-3 border-t border-white/10 px-5 py-4 sm:border-l sm:border-t-0">
       <span className="text-2xl">🔥</span>
-
+      
       <div className="flex flex-col items-start">
-        <span className="text-base font-black leading-none text-white">
-          Série actuelle : {homeStats.currentWinStreak ?? 0}
-        </span>
-
-        <span className="mt-2 text-xs font-bold text-slate-500">
-          Parties à 2 joueurs et +
-        </span>
+      <span className="text-base font-black leading-none text-white">
+      Série actuelle : {homeStats.currentWinStreak ?? 0}
+      </span>
+      
+      <span className="mt-2 text-xs font-bold text-slate-500">
+      Parties à 2 joueurs et +
+      </span>
       </div>
-    </div>
-  </div>
-)}
+      </div>
+      </div>
+    )}
     </div>
     
     {/* Actions principales */}
-<div className="mt-10 grid items-stretch gap-6 lg:grid-cols-2">
-  {/* Partie rapide */}
-  <button
+    <div className="mt-10 grid items-stretch gap-6 lg:grid-cols-2">
+    {/* Partie rapide */}
+    <button
     type="button"
     onClick={onQuickGame}
     className="group relative flex h-full flex-col overflow-hidden rounded-[28px] border border-[#C44934]/80 bg-[#100C0B]/95 p-6 text-left shadow-2xl transition duration-300 hover:-translate-y-1 hover:border-[#E65F47] hover:shadow-[0_22px_70px_rgba(196,73,52,0.18)] sm:p-8"
-  >
+    >
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(196,73,52,0.14),transparent_45%)]" />
-
+    
     <div className="relative flex h-full flex-col">
-      <div className="flex min-h-[108px] items-start gap-5">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#C44934]/50 bg-[#C44934]/10 text-4xl shadow-inner">
-          🎲
-        </div>
-
-        <div>
-          <h2 className="text-3xl font-black">
-            Partie rapide
-          </h2>
-
-          <p className="mt-2 max-w-md text-base font-semibold leading-7 text-slate-400">
-            Lance une partie classique en local ou en Salon.
-          </p>
-        </div>
-      </div>
-
-      {/* Zone centrale */}
-      <div className="mt-7 flex flex-1 items-stretch">
-        <div className="grid min-h-[130px] w-full overflow-hidden rounded-2xl border border-[#C44934]/25 bg-black/30 sm:grid-cols-2">
-          <div className="flex items-center gap-4 px-5 py-5">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
-              🏠
-            </div>
-
-            <div>
-              <div className="font-black uppercase tracking-wide text-[#F06A52]">
-                Local
-              </div>
-
-              <div className="mt-1 text-sm font-medium text-slate-400">
-                Un joueur note tout
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-[#C44934]/20 sm:border-l sm:border-t-0">
-            <div className="flex h-full items-center gap-4 px-5 py-5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
-                👥
-              </div>
-
-              <div>
-                <div className="font-black uppercase tracking-wide text-[#F06A52]">
-                  Salon
-                </div>
-
-                <div className="mt-1 text-sm font-medium text-slate-400">
-                  Chacun note sur son téléphone
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#C44934] px-5 py-4 font-black transition group-hover:bg-[#D95841]">
-        <span>Configurer ma partie</span>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
-  <ChevronRight className="h-6 w-6" strokeWidth={3} />
-</div>
-      </div>
+    <div className="flex min-h-[108px] items-start gap-5">
+    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#C44934]/50 bg-[#C44934]/10 text-4xl shadow-inner">
+    🎲
     </div>
-  </button>
-
-  {/* Modes spéciaux */}
-  <button
+    
+    <div>
+    <h2 className="text-3xl font-black">
+    Partie rapide
+    </h2>
+    
+    <p className="mt-2 max-w-md text-base font-semibold leading-7 text-slate-400">
+    Lance une partie classique en local ou en Salon.
+    </p>
+    </div>
+    </div>
+    
+    {/* Zone centrale */}
+    <div className="mt-7 flex flex-1 items-stretch">
+    <div className="grid min-h-[130px] w-full overflow-hidden rounded-2xl border border-[#C44934]/25 bg-black/30 sm:grid-cols-2">
+    <div className="flex items-center gap-4 px-5 py-5">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
+    🏠
+    </div>
+    
+    <div>
+    <div className="font-black uppercase tracking-wide text-[#F06A52]">
+    Local
+    </div>
+    
+    <div className="mt-1 text-sm font-medium text-slate-400">
+    Un joueur note tout
+    </div>
+    </div>
+    </div>
+    
+    <div className="border-t border-[#C44934]/20 sm:border-l sm:border-t-0">
+    <div className="flex h-full items-center gap-4 px-5 py-5">
+    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
+    👥
+    </div>
+    
+    <div>
+    <div className="font-black uppercase tracking-wide text-[#F06A52]">
+    Salon
+    </div>
+    
+    <div className="mt-1 text-sm font-medium text-slate-400">
+    Chacun note sur son téléphone
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    </div>
+    
+    <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#C44934] px-5 py-4 font-black transition group-hover:bg-[#D95841]">
+    <span>Configurer ma partie</span>
+    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
+    <ChevronRight className="h-6 w-6" strokeWidth={3} />
+    </div>
+    </div>
+    </div>
+    </button>
+    
+    {/* Modes spéciaux */}
+    <button
     type="button"
     onClick={() => {
-  if (!isLoggedIn) {
-    setShowSpecialModesModal(true);
-    return;
-  }
-
-  onSpecialModes();
-}}
+      if (!isLoggedIn) {
+        setShowSpecialModesModal(true);
+        return;
+      }
+      
+      onSpecialModes();
+    }}
     className="group relative flex h-full flex-col overflow-hidden rounded-[28px] border border-[#B98224]/80 bg-[#100E09]/95 p-6 text-left shadow-2xl transition duration-300 hover:-translate-y-1 hover:border-[#E1A83E] hover:shadow-[0_22px_70px_rgba(185,130,36,0.18)] sm:p-8"
-  >
+    >
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(185,130,36,0.14),transparent_45%)]" />
-
+    
     <div className="relative flex h-full flex-col">
-      <div className="flex min-h-[108px] items-start gap-5">
-        <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#B98224]/50 bg-[#B98224]/10 text-4xl shadow-inner">
-          🏆
-        </div>
-
-        <div>
-          <h2 className="text-3xl font-black">
-            Modes spéciaux
-          </h2>
-
-          <p className="mt-2 max-w-md text-base font-semibold leading-7 text-slate-400">
-            Joue des compétitions et découvre de nouveaux formats.
-          </p>
-        </div>
-      </div>
-
-      {/* Zone centrale */}
-      <div className="mt-7 flex flex-1 items-stretch">
-        <div className="grid min-h-[130px] w-full grid-cols-3 gap-3">
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
-            <span className="text-3xl">🎾</span>
-            <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
-              Grand Chelem
-            </span>
-          </div>
-
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
-            <span className="text-3xl">⚽</span>
-            <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
-              Coupe du monde
-            </span>
-          </div>
-
-          <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
-  <span className="text-3xl">🏎️</span>
-
-  <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
-    Grand Prix
-  </span>
-</div>
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#A77322] px-5 py-4 font-black transition group-hover:bg-[#BD8628]">
-        <span>Découvrir les modes</span>
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
-  <ChevronRight className="h-6 w-6" strokeWidth={3} />
-</div>
-      </div>
+    <div className="flex min-h-[108px] items-start gap-5">
+    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-[#B98224]/50 bg-[#B98224]/10 text-4xl shadow-inner">
+    🏆
     </div>
-  </button>
-</div>
+    
+    <div>
+    <h2 className="text-3xl font-black">
+    Modes spéciaux
+    </h2>
+    
+    <p className="mt-2 max-w-md text-base font-semibold leading-7 text-slate-400">
+    Joue des compétitions et découvre de nouveaux formats.
+    </p>
+    </div>
+    </div>
+    
+    {/* Zone centrale */}
+    <div className="mt-7 flex flex-1 items-stretch">
+    <div className="grid min-h-[130px] w-full grid-cols-3 gap-3">
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
+    <span className="text-3xl">🎾</span>
+    <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
+    Grand Chelem
+    </span>
+    </div>
+    
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
+    <span className="text-3xl">⚽</span>
+    <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
+    Coupe du monde
+    </span>
+    </div>
+    
+    <div className="flex flex-col items-center justify-center rounded-2xl border border-[#B98224]/25 bg-black/30 px-2 py-4 text-center">
+    <span className="text-3xl">🏎️</span>
+    
+    <span className="mt-3 flex min-h-10 items-center justify-center text-sm font-black sm:text-base">
+    Grand Prix
+    </span>
+    </div>
+    </div>
+    </div>
+    
+    <div className="mt-5 flex items-center justify-between rounded-2xl bg-[#A77322] px-5 py-4 font-black transition group-hover:bg-[#BD8628]">
+    <span>Découvrir les modes</span>
+    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 transition group-hover:bg-white/20">
+    <ChevronRight className="h-6 w-6" strokeWidth={3} />
+    </div>
+    </div>
+    </div>
+    </button>
+    </div>
     
     {/* Partie locale sauvegardée */}
     <div
-  className={[
-    "mt-6 grid gap-5",
-    isLoggedIn
+    className={[
+      "mt-6 grid gap-5",
+      isLoggedIn
       ? "lg:grid-cols-[380px_1fr]"
       : "lg:grid-cols-[1000px_1fr]",
-  ].join(" ")}
->
-  {/* Partie en cours */}
-  <div className="rounded-2xl border border-white/10 bg-[#101010]/90 p-5 shadow-2xl">
+    ].join(" ")}
+    >
+    {/* Partie en cours */}
+    <div className="rounded-2xl border border-white/10 bg-[#101010]/90 p-5 shadow-2xl">
     {hasSavedGame && savedGameInfo ? (
       <div className="flex h-full flex-col justify-between gap-5">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
-            📋
-          </div>
-
-          <div>
-            <div className="text-base font-black text-[#F06A52]">
-              Continuer la partie
-            </div>
-
-            <div className="mt-2 text-sm font-bold text-white">
-              {savedGameInfo.mode} · {savedGameInfo.playerCount}{" "}
-              {savedGameInfo.playerCount > 1 ? "joueurs" : "joueur"}
-            </div>
-
-            <div className="mt-1 text-xs font-semibold text-slate-500">
-              {savedGameInfo.remainingTurns}{" "}
-              {savedGameInfo.remainingTurns > 1
-                ? "tours restants"
-                : "tour restant"}
-            </div>
-          </div>
+      <div className="flex items-start gap-4">
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C44934]/15 text-2xl">
+      📋
+      </div>
+      
+      <div>
+      <div className="text-base font-black text-[#F06A52]">
+      Continuer la partie
+      </div>
+      
+      <div className="mt-2 text-sm font-bold text-white">
+      {savedGameInfo.mode} · {savedGameInfo.playerCount}{" "}
+      {savedGameInfo.playerCount > 1 ? "joueurs" : "joueur"}
+      </div>
+      
+      <div className="mt-1 text-xs font-semibold text-slate-500">
+      {savedGameInfo.remainingTurns}{" "}
+      {savedGameInfo.remainingTurns > 1
+        ? "tours restants"
+        : "tour restant"}
         </div>
-
+        </div>
+        </div>
+        
         <button
-          type="button"
-          onClick={onResumeGame}
-          className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C44934] px-6 font-black text-white transition hover:bg-[#D95841]"
+        type="button"
+        onClick={onResumeGame}
+        className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C44934] px-6 font-black text-white transition hover:bg-[#D95841]"
         >
-          <ChevronRight className="h-6 w-6" strokeWidth={3} />
-          Reprendre
+        <ChevronRight className="h-6 w-6" strokeWidth={3} />
+        Reprendre
         </button>
-      </div>
-    ) : (
-      <div className="flex h-full items-center gap-4">
+        </div>
+      ) : (
+        <div className="flex h-full items-center gap-4">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/5 text-2xl">
-          💾
+        💾
         </div>
-
+        
         <div>
-          <div className="text-base font-black text-white">
-            Aucune partie rapide en cours
-          </div>
-
-          <div className="mt-1 text-sm font-medium text-slate-500">
-            Lance une partie rapide pour commencer.
-          </div>
+        <div className="text-base font-black text-white">
+        Aucune partie rapide en cours
         </div>
+        
+        <div className="mt-1 text-sm font-medium text-slate-500">
+        Lance une partie rapide pour commencer.
+        </div>
+        </div>
+        </div>
+      )}
       </div>
-    )}
-  </div>
-
-  {/* Navigation secondaire */}
-  
-  <div
-  className={[
-    "grid gap-4",
-    isLoggedIn
-      ? "grid-cols-2 sm:grid-cols-4"
-      : "grid-cols-1 justify-items-start",
-  ].join(" ")}
->
-  {isLoggedIn && (
-    <>
-      <button
+      
+      {/* Navigation secondaire */}
+      
+      <div
+      className={[
+        "grid gap-4",
+        isLoggedIn
+        ? "grid-cols-2 sm:grid-cols-4"
+        : "grid-cols-1 justify-items-start",
+      ].join(" ")}
+      >
+      {isLoggedIn && (
+        <>
+        <button
         type="button"
         onClick={onProfile}
         className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-blue-500/50 hover:bg-[#151A22]"
-      >
+        >
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-2xl">
-          📊
+        📊
         </div>
-
+        
         <div className="mt-3 font-black text-white">
-          Profil
+        Profil
         </div>
-
+        
         <div className="mt-1 text-xs font-medium text-slate-500">
-          Voir mes stats
+        Voir mes stats
         </div>
-      </button>
-
-      <button
+        </button>
+        
+        <button
         type="button"
         onClick={onAchievements}
         className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-purple-500/50 hover:bg-[#151A22]"
-      >
+        >
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-purple-500/20 bg-purple-500/10 text-2xl">
-          🏅
+        🏅
         </div>
-
+        
         <div className="mt-3 font-black text-white">
-          Succès
+        Succès
         </div>
-
+        
         <div className="mt-1 text-xs font-medium text-slate-500">
-          Voir mes succès
+        Voir mes succès
         </div>
-      </button>
-
-      <button
+        </button>
+        
+        <button
         type="button"
         onClick={onHistory}
         className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-green-500/50 hover:bg-[#151A22]"
-      >
+        >
         <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-green-500/20 bg-green-500/10 text-2xl">
-          🕘
+        🕘
         </div>
-
+        
         <div className="mt-3 font-black text-white">
-          Historique
+        Historique
         </div>
-
+        
         <div className="mt-1 text-xs font-medium text-slate-500">
-          Mes parties
+        Mes parties
         </div>
-      </button>
-    </>
-  )}
-
-  <button
-    type="button"
-    onClick={onRules}
-    className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-blue-400/50 hover:bg-[#151A22]"
-  >
-    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-400/10 text-2xl">
+        </button>
+        </>
+      )}
+      
+      <button
+      type="button"
+      onClick={onRules}
+      className="group flex min-h-[130px] flex-col items-center justify-center rounded-2xl border border-slate-800 bg-[#101318]/90 p-4 text-center transition hover:-translate-y-1 hover:border-blue-400/50 hover:bg-[#151A22]"
+      >
+      <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-blue-400/20 bg-blue-400/10 text-2xl">
       📖
-    </div>
-
-    <div className="mt-3 font-black text-white">
+      </div>
+      
+      <div className="mt-3 font-black text-white">
       Règles
-    </div>
-
-    <div className="mt-1 text-xs font-medium text-slate-500">
+      </div>
+      
+      <div className="mt-1 text-xs font-medium text-slate-500">
       Apprendre à jouer
-    </div>
-  </button>
-</div>
-</div>
+      </div>
+      </button>
+      </div>
+      </div>
       </div>
       {showSpecialModesModal && (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
-    onClick={() => setShowSpecialModesModal(false)}
-  >
-    <div
-      className="w-full max-w-md rounded-3xl border border-[#B98224]/60 bg-[#111111] p-7 text-center shadow-2xl"
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#B98224]/40 bg-[#B98224]/10 text-4xl">
+        <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm"
+        onClick={() => setShowSpecialModesModal(false)}
+        >
+        <div
+        className="w-full max-w-md rounded-3xl border border-[#B98224]/60 bg-[#111111] p-7 text-center shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+        >
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-[#B98224]/40 bg-[#B98224]/10 text-4xl">
         🏆
-      </div>
-
-      <h2 className="mt-5 text-2xl font-black text-white">
+        </div>
+        
+        <h2 className="mt-5 text-2xl font-black text-white">
         Connecte-toi pour en profiter
-      </h2>
-
-      <p className="mt-3 text-sm font-semibold leading-6 text-slate-400">
+        </h2>
+        
+        <p className="mt-3 text-sm font-semibold leading-6 text-slate-400">
         Les modes spéciaux nécessitent un profil YamScore pour
         sauvegarder tes compétitions et ta progression.
-      </p>
-
-      <p className="mt-3 text-sm font-bold text-[#D6A14A]">
+        </p>
+        
+        <p className="mt-3 text-sm font-bold text-[#D6A14A]">
         Utilise le bouton de connexion en haut à droite.
-      </p>
-
-      <button
+        </p>
+        
+        <button
         type="button"
         onClick={() => setShowSpecialModesModal(false)}
         className="mt-6 w-full rounded-xl bg-[#A77322] px-5 py-3 font-black text-white transition hover:bg-[#BD8628]"
-      >
+        >
         Compris
-      </button>
-    </div>
-  </div>
-)}
+        </button>
+        </div>
+        </div>
+      )}
       </section>
     );
     

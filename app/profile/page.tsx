@@ -20,6 +20,10 @@ import {
   WORLD_CUP_MILESTONES,
   GRAND_PRIX_MILESTONES,
   GRAND_PRIX_TITLE_MILESTONES,
+  BASKET_COMPETITION_MILESTONES,
+  BASKET_MATCH_MILESTONES,
+  BASKET_QUARTER_MILESTONES,
+  BASKET_SWEEP_MILESTONES,
 } from "../lib/xpRules";
 import {
   LEVEL_XP,
@@ -262,19 +266,15 @@ if (adminError) {
 // await rebuildProfileStats(ensuredProfile.id);
 
 const xpSyncResult = await syncMissingGameXp(ensuredProfile.id);
-      console.log("Résultat sync XP rétroactive", xpSyncResult);
+      
 
 const syncResult = await syncProfileAchievements(ensuredProfile.id);
 
-console.log("Résultat sync succès", syncResult);
+
       
 
-if (xpSyncResult.xp > 0) {
-  console.log("XP rétroactive synchronisée", xpSyncResult);
-}
-      if (syncResult.xpAwarded > 0) {
-        console.log("Succès synchronisés", syncResult);
-      }
+
+      
       if (profileError) {
         console.error("Erreur chargement profil", profileError);
         router.push("/");
@@ -419,13 +419,7 @@ if (xpSyncResult.xp > 0) {
           const competitiveItems = filteredItems.filter(
   (game) => game.playerCount >= 2 && game.rank > 0
 );
-          console.log(
-  "Répartition des rangs",
-  competitiveItems.reduce((acc, game) => {
-    acc[game.rank] = (acc[game.rank] ?? 0) + 1;
-    return acc;
-  }, {} as Record<number, number>)
-);
+          
           const filteredWins = competitiveItems.filter((game) => game.rank === 1).length;
 
 const filteredAverageRank =
@@ -997,6 +991,61 @@ const levelProgress =
   value:
     achievementStats?.world_cup_wins ?? 0,
   milestones: WORLD_CUP_MILESTONES,
+},
+{
+  value:
+    achievementStats?.grand_prix_played ?? 0,
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  value:
+    achievementStats?.grand_prix_wins ?? 0,
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  value:
+    achievementStats?.grand_prix_podiums ?? 0,
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  value:
+    achievementStats?.grand_prix_seasons_completed ?? 0,
+  milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  value:
+    achievementStats?.grand_prix_titles ?? 0,
+  milestones: GRAND_PRIX_TITLE_MILESTONES,
+},
+{
+  value:
+    achievementStats?.basket_competitions ?? 0,
+  milestones: BASKET_COMPETITION_MILESTONES,
+},
+{
+  value:
+    achievementStats?.basket_competition_wins ?? 0,
+  milestones: BASKET_COMPETITION_MILESTONES,
+},
+{
+  value:
+    achievementStats?.basket_matches ?? 0,
+  milestones: BASKET_MATCH_MILESTONES,
+},
+{
+  value:
+    achievementStats?.basket_match_wins ?? 0,
+  milestones: BASKET_MATCH_MILESTONES,
+},
+{
+  value:
+    achievementStats?.basket_quarter_wins ?? 0,
+  milestones: BASKET_QUARTER_MILESTONES,
+},
+{
+  value:
+    achievementStats?.basket_sweeps ?? 0,
+  milestones: BASKET_SWEEP_MILESTONES,
 },
         ];
         
@@ -2207,6 +2256,50 @@ console.log("PROFILE_STATS RELOADED", refreshedStats);
     title="Championnats remportés"
     value={achievementStats?.grand_prix_titles ?? 0}
     milestones={GRAND_PRIX_TITLE_MILESTONES}
+  />
+  
+</AchievementSection>
+<AchievementSection title="🏀 Basket">
+  <AchievementCard
+    icon="🏀"
+    title="Compétitions disputées"
+    value={achievementStats?.basket_competitions ?? 0}
+    milestones={BASKET_COMPETITION_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🏆"
+    title="Compétitions remportées"
+    value={achievementStats?.basket_competition_wins ?? 0}
+    milestones={BASKET_COMPETITION_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🎮"
+    title="Matchs disputés"
+    value={achievementStats?.basket_matches ?? 0}
+    milestones={BASKET_MATCH_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🥇"
+    title="Matchs remportés"
+    value={achievementStats?.basket_match_wins ?? 0}
+    milestones={BASKET_MATCH_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="⏱️"
+    title="Quart-temps remportés"
+    value={achievementStats?.basket_quarter_wins ?? 0}
+    milestones={BASKET_QUARTER_MILESTONES}
+  />
+
+  <AchievementCard
+    icon="🧹"
+    title="Sweeps 4–0"
+    value={achievementStats?.basket_sweeps ?? 0}
+    milestones={BASKET_SWEEP_MILESTONES}
   />
 </AchievementSection>
                 <AchievementSection title="🏅 Exploits">

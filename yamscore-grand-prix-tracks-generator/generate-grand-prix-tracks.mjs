@@ -218,7 +218,7 @@ async function main() {
       viewBox: `0 0 ${WIDTH} ${HEIGHT}`,
     });
 
-    console.log("OK");
+    
   }
 
   await fs.writeFile(
@@ -243,7 +243,7 @@ async function main() {
     "utf8"
   );
 
-  console.log(`\n19 tracés créés dans : ${OUTPUT_DIR}`);
+  
 }
 
 main().catch((error) => {

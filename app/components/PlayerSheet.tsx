@@ -20,6 +20,8 @@ type Player = {
   name: string;
   playerOrder?: number;
   player_order?: number;
+
+  basketTeam?: "A" | "B" | null;
 };
 
 type SelectedCell = {
@@ -103,7 +105,14 @@ const activeTheme =
   grandPrixTheme ?? tournamentTheme;
   const activeScoreColor =
   activeTheme?.sheet?.scoreText ?? null;
-
+const isBasketTheme =
+  activeTheme?.id === "basket";
+  const basketTeamColor =
+  player.basketTeam === "A"
+    ? "#F47B20"
+    : player.basketTeam === "B"
+      ? "#3B82F6"
+      : null;
 const activeTurnColor =
   activeTheme?.sheet?.activeText ?? null;
   
@@ -116,16 +125,18 @@ const activeTurnColor =
       : "",
   ].join(" ")}
   style={{
-    background:
-      activeTheme?.sheet?.cardBackground ??
-      "linear-gradient(135deg, #F7EFE6 0%, #F1E2D4 100%)",
+  background:
+    activeTheme?.sheet?.cardBackground ??
+    "linear-gradient(135deg, #F7EFE6 0%, #F1E2D4 100%)",
 
-    borderColor:
-      activeTheme?.sheet?.cardBorder,
-  }}
+  borderColor:
+    isBasketTheme && basketTeamColor
+      ? basketTeamColor
+      : activeTheme?.sheet?.cardBorder,
+}}
 >
     <div className="relative  text-center">
-    
+     
     {editingPlayerId === player.id ? (
       <input
       autoFocus
@@ -155,13 +166,31 @@ const activeTurnColor =
         "
       />
     ) : (
-      <div className="relative inline-block">
-  <h2 className="text-xl font-black text-[#241812]">
+      <div className="relative inline-flex items-center gap-2">
+  {isBasketTheme && basketTeamColor && (
+    <span
+      className="h-3 w-3 shrink-0 rounded-full"
+      style={{
+        backgroundColor: basketTeamColor,
+        boxShadow: `0 0 6px ${basketTeamColor}80`,
+      }}
+      title={`Équipe ${player.basketTeam}`}
+    />
+  )}
+
+  <h2
+    className="text-xl font-black"
+    style={{
+      color: "#241812",
+    }}
+  >
     {player.name}
   </h2>
 
   <button
-    onClick={() => startEditingPlayer(player.id, player.name)}
+    onClick={() =>
+      startEditingPlayer(player.id, player.name)
+    }
     className="absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-white"
     title="Renommer"
   >
@@ -281,7 +310,8 @@ const activeTurnColor =
     activeColumns.length === 6
     ? "grid-cols-[56px_40px_40px_6px_40px_40px_6px_40px_40px]"
     : "grid-cols-[56px_40px_6px_40px_6px_40px]";
-    
+    const isBasketTheme =
+  tournamentTheme?.id === "basket";
     const tournamentSheetTheme = {
   australian_open: {
   totalBackground: "#E8D8C5",
@@ -383,21 +413,21 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
         
         items.push(
           <ScoreGridCell
-          key={`${column.id}-${row.id}`}
-          playerId={player.id}
-          isFirstRow={rowIndex === 0}
-          columnId={column.id}
-          rowId={row.id}
-          rowIndex={rowIndex}
-          isBlockStart={isBlockStart}
-          section={section}
-          value={getScore(player.id, column.id, row.id)}
-          playable={isCellPlayable(player.id, column.id, row.id)}
-          onSelectCell={onSelectCell}
-          lastScoreAnimation={lastScoreAnimation}
-          highContrast={highContrast}
-          
-          />
+  key={`${column.id}-${row.id}`}
+  playerId={player.id}
+  isFirstRow={rowIndex === 0}
+  columnId={column.id}
+  rowId={row.id}
+  rowIndex={rowIndex}
+  isBlockStart={isBlockStart}
+  section={section}
+  value={getScore(player.id, column.id, row.id)}
+  playable={isCellPlayable(player.id, column.id, row.id)}
+  onSelectCell={onSelectCell}
+  lastScoreAnimation={lastScoreAnimation}
+  highContrast={highContrast}
+  isBasketTheme={isBasketTheme}
+/>
         );
         
         return items;
@@ -419,9 +449,14 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
         
         items.push(
           <div
-          key={column.id}
-          className="h-7 text-xl text-[#241812]"
-          >
+  key={column.id}
+  className="h-7 text-xl"
+  style={{
+    color: isBasketTheme
+  ? "#6B3214"
+  : "#241812",
+  }}
+>
           {column.type === "down" && "↓"}
           {column.type === "free" && "L"}
           {column.type === "up" && "↑"}
@@ -433,7 +468,15 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
       </div>
       
       {/* Bloc 1 : 1 à Total */}
-      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
+      <div
+  style={{
+    backgroundColor: highContrast
+      ? "#E7E4DC"
+      : isBasketTheme
+        ? "#F3E7D7"
+        : "#F6EDE3",
+  }}
+>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       {rows.slice(0, 6).map((row, rowIndex) => (
         <React.Fragment key={row.id}>
@@ -442,6 +485,7 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
   tournamentTheme={tournamentTheme}
   sheetTheme={sheetTheme}
   highContrast={highContrast}
+  isBasketTheme={isBasketTheme}
   rowId={row.id}
   section="top"
 >
@@ -508,8 +552,12 @@ labelStyle={
     ? highContrastBonusStyle
     : sheetTheme
       ? {
-          backgroundColor: sheetTheme.totalBackground,
-          color: sheetTheme.totalText,
+          backgroundColor:
+  tournamentTheme?.sheet?.bonusBackground ??
+  sheetTheme.totalBackground,
+color:
+  tournamentTheme?.sheet?.bonusText ??
+  sheetTheme.totalText,
         }
       : undefined
 }
@@ -518,8 +566,12 @@ cellStyle={
     ? highContrastBonusStyle
     : sheetTheme
       ? {
-          backgroundColor: sheetTheme.totalBackground,
-          color: sheetTheme.totalText,
+          backgroundColor:
+  tournamentTheme?.sheet?.bonusBackground ??
+  sheetTheme.totalBackground,
+color:
+  tournamentTheme?.sheet?.bonusText ??
+  sheetTheme.totalText,
         }
       : undefined
 }
@@ -567,13 +619,22 @@ labelStyle={
       </div>
       
       {/* Bloc 2 : - et + */}
-      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
+      <div
+  style={{
+    backgroundColor: highContrast
+      ? "#E7E4DC"
+      : isBasketTheme
+        ? "#F3E7D7"
+        : "#F6EDE3",
+  }}
+>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       {rows.slice(6, 8).map((row, rowIndex) => (
         <React.Fragment key={row.id}>
         <GridLabel
   isFirstRow={rowIndex === 0}
   tournamentTheme={tournamentTheme}
+  isBasketTheme={isBasketTheme}
   sheetTheme={sheetTheme}
   highContrast={highContrast}
   rowId={row.id}
@@ -588,7 +649,15 @@ labelStyle={
       </div>
       
       {/* Bloc 3 : Brelan à Yam */}
-      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
+      <div
+  style={{
+    backgroundColor: highContrast
+      ? "#E7E4DC"
+      : isBasketTheme
+        ? "#F3E7D7"
+        : "#F6EDE3",
+  }}
+>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       {rows.slice(8).map((row, rowIndex) => (
         <React.Fragment key={row.id}>
@@ -596,6 +665,7 @@ labelStyle={
   isFirstRow={rowIndex === 0}
   tournamentTheme={tournamentTheme}
   sheetTheme={sheetTheme}
+  isBasketTheme={isBasketTheme}
   highContrast={highContrast}
   rowId={row.id}
   section="bottom"
@@ -609,7 +679,15 @@ labelStyle={
       </div>
       
       {/* Bloc 4 : Total et Final */}
-      <div className={highContrast ? "bg-[#E7E4DC]" : "bg-[#F6EDE3]"}>
+      <div
+  style={{
+    backgroundColor: highContrast
+      ? "#E7E4DC"
+      : isBasketTheme
+        ? "#F3E7D7"
+        : "#F6EDE3",
+  }}
+>
       <div className={`grid ${gridColumns} text-center text-sm font-black`}>
       <TotalGridRow
       label="Total"
@@ -692,6 +770,7 @@ cellStyle={
   highContrast,
   rowId,
   section,
+  isBasketTheme,
 }: {
   children: React.ReactNode;
   isFirstRow?: boolean;
@@ -703,6 +782,7 @@ cellStyle={
   highContrast: boolean;
   rowId: YamRow;
   section: "top" | "bottom";
+  isBasketTheme: boolean;
 }) {
     const dice =
     typeof children === "string" &&
@@ -741,9 +821,21 @@ const highContrastBackground = highContrast
         isFirstRow ? CELL_BORDER_FIRST_ROW : "",
       ].join(" ")}
       style={{
-  backgroundColor: highContrastBackground,
-  borderColor: highContrast ? "#4A4A42" : undefined,
-  color: highContrast ? "#17130A" : undefined,
+  backgroundColor: highContrast
+    ? highContrastBackground
+    : isBasketTheme
+      ? "#E8D3BE"
+      : undefined,
+
+  borderColor: highContrast
+    ? "#4A4A42"
+    : isBasketTheme
+      ? "#A66A3D"
+      : undefined,
+
+  color: highContrast
+    ? "#17130A"
+    : "#241812",
 }}
       >
       {dice ? (
@@ -762,48 +854,53 @@ const highContrastBackground = highContrast
   }
   
   function ScoreGridCell({
-    playerId,
-    columnId,
-    rowId,
-    rowIndex,
-    section,
-    value,
-    playable,
-    onSelectCell,
-    lastScoreAnimation,
-    isFirstRow = false,
-    isBlockStart = false,
-    highContrast,
-  }: {
+  playerId,
+  columnId,
+  rowId,
+  rowIndex,
+  section,
+  value,
+  playable,
+  onSelectCell,
+  lastScoreAnimation,
+  isFirstRow = false,
+  isBlockStart = false,
+  highContrast,
+  isBasketTheme,
+}: {
+  playerId: string;
+  columnId: string;
+  isBlockStart?: boolean;
+  rowId: YamRow;
+  rowIndex: number;
+  section: "top" | "bottom";
+  value: ScoreValue;
+  playable: boolean;
+  onSelectCell: (cell: SelectedCell) => void;
+  lastScoreAnimation: {
     playerId: string;
     columnId: string;
-    isBlockStart?: boolean;
-    rowId: YamRow;
-    rowIndex: number;
-    section: "top" | "bottom";
-    value: ScoreValue;
-    playable: boolean;
-    onSelectCell: (cell: SelectedCell) => void;
-    lastScoreAnimation: {
-      playerId: string;
-      columnId: string;
-      rowId: string;
-      value: number | "X";
-    } | null;
-    isFirstRow?: boolean;
-    highContrast: boolean;
-  }) {
-    const backgroundColor = highContrast
+    rowId: string;
+    value: number | "X";
+  } | null;
+  isFirstRow?: boolean;
+  highContrast: boolean;
+  isBasketTheme: boolean;
+}) {
+   const backgroundColor = highContrast
   ? section === "top"
     ? getHighContrastTopColor(rowIndex)
     : getHighContrastBottomColor(rowId)
-  : undefined;
+  : isBasketTheme
+    ? "#F8EFE4"
+    : undefined;
 
-const colorClass = highContrast
-  ? ""
-  : section === "top"
-    ? getTopColor(rowIndex)
-    : getBottomColor(rowIndex);
+const colorClass =
+  highContrast || isBasketTheme
+    ? ""
+    : section === "top"
+      ? getTopColor(rowIndex)
+      : getBottomColor(rowIndex);
     
     const isLastPlayed =
     lastScoreAnimation?.playerId === playerId &&
@@ -813,9 +910,16 @@ const colorClass = highContrast
     return (
       <div
   style={{
-    backgroundColor,
-    borderColor: highContrast ? "#4A4A42" : undefined,
-  }}
+  backgroundColor,
+
+  borderColor: highContrast
+    ? "#4A4A42"
+    : isBasketTheme
+      ? "#B98A65"
+      : undefined,
+
+  color: "#241812",
+}}
   onClick={() => {
     if (!playable) return;
     onSelectCell({ playerId, columnId, rowId });

@@ -5,6 +5,7 @@ type Player = {
   name: string;
   playerOrder?: number;
   player_order?: number;
+  basketTeam?: "A" | "B" | null;
 };
 
 
@@ -105,7 +106,15 @@ const hasCustomLeaderboardTheme =
     : tournamentTheme
       ? "text-[#241812]"
       : "text-[#F7EFE6]";
+const basketTeamColor =
+  player.basketTeam === "A"
+    ? "#F47B20"
+    : player.basketTeam === "B"
+      ? "#3B82F6"
+      : null;
 
+const isBasketTheme =
+  tournamentTheme?.id === "basket";
   return (
     <div
   key={player.id}
@@ -119,13 +128,17 @@ const hasCustomLeaderboardTheme =
       : "text-white",
   ].join(" ")}
   style={
-    leaderboardTheme
-      ? {
-          borderColor: leaderboardTheme.cardBorder,
-          background: leaderboardTheme.cardBackground,
-        }
-      : undefined
-  }
+  leaderboardTheme
+    ? {
+        borderColor:
+          isBasketTheme && basketTeamColor
+            ? basketTeamColor
+            : leaderboardTheme.cardBorder,
+
+        background: leaderboardTheme.cardBackground,
+      }
+    : undefined
+}
 >
   <div className="flex items-start justify-between gap-3">
   <span
@@ -206,11 +219,22 @@ const hasCustomLeaderboardTheme =
 
 <div
   className={[
-    "mt-0.5 text-base font-black",
+    "mt-0.5 flex items-center gap-2 text-base font-black",
     playerTextClass,
   ].join(" ")}
 >
-  {player.name}
+  {isBasketTheme && basketTeamColor && (
+    <span
+      className="h-2.5 w-2.5 shrink-0 rounded-full"
+      style={{
+        backgroundColor: basketTeamColor,
+        boxShadow: `0 0 5px ${basketTeamColor}80`,
+      }}
+      title={`Équipe ${player.basketTeam}`}
+    />
+  )}
+
+  <span>{player.name}</span>
 </div>
 
 {!gameFinished && player.id === currentPlayerId && (

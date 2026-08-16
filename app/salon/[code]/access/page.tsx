@@ -30,6 +30,7 @@ type SalonData = {
   | "grand_slam_final"
   | "world_cup"
   | "grand_prix"
+  | "basket"
   | null;
   
   competition_theme: TournamentTheme | null;
@@ -85,6 +86,7 @@ export default function PlayerAccessPage() {
         | "grand_slam_final"
         | "world_cup"
         | "grand_prix"
+        | "basket"
         | null = null;
         let circuitId: string | null = null;
         if (salonData.competition_id) {
@@ -99,7 +101,9 @@ export default function PlayerAccessPage() {
             competition.competition_type as
             | "grand_slam_final"
             | "world_cup"
-            | "grand_prix";
+            | "grand_prix"
+            | "basket"
+            ;
           }
           
           if (competition?.theme) {
@@ -144,11 +148,7 @@ export default function PlayerAccessPage() {
         .select("player_order")
         .eq("game_id", salonData.id);
         
-        console.log("CLAIMS CHARGÉS", {
-          salonId: salonData.id,
-          claimsData,
-          claimsError,
-        });
+        
         
         const connectedOrders = new Set(
           (claimsData ?? []).map(
@@ -168,6 +168,8 @@ export default function PlayerAccessPage() {
           ? "Coupe du Monde"
           : competitionType === "grand_prix"
           ? getGrandPrixCircuitTheme(circuitId)?.name ?? "Grand Prix"
+          : competitionType === "basket"
+          ? "Basket"
           : competitionName,
         } as SalonData);
         
@@ -391,7 +393,12 @@ export default function PlayerAccessPage() {
           );
           return;
         }
-        
+        if (salon.competition_type === "basket") {
+          router.push(
+            `/modes-speciaux/basket/${salon.competition_id}`
+          );
+          return;
+        }
         router.push(
           `/modes-speciaux/grand-chelem/${salon.competition_id}`
         );
@@ -412,6 +419,8 @@ export default function PlayerAccessPage() {
       ? "Retour à la Coupe du Monde"
       : salon.competition_type === "grand_prix"
       ? "Retour à la saison"
+      : salon.competition_type === "basket"
+      ? "Retour à la compétition"
       : "Retour à la finale"
       : "Retour au Salon"}
       </button>
@@ -442,6 +451,8 @@ export default function PlayerAccessPage() {
             ? `Coupe du Monde · Tour ${salon.competition_round_number}`
             : salon.competition_type === "grand_prix"
             ? `${salon.competition_name ?? "Grand Prix"} · Manche ${salon.competition_round_number}`
+            : salon.competition_type === "basket"
+            ? `Basket · Match ${salon.competition_round_number}`
             : `Finale de Grand Chelem · Set ${salon.competition_round_number}`}
             </p>
           )}
@@ -466,15 +477,15 @@ export default function PlayerAccessPage() {
               <div className="flex items-start justify-between gap-3">
               <div>
               <p
-  className={[
-    "text-xs font-black uppercase tracking-widest",
-    tournamentTheme
-      ? tournamentTheme.accentText
-      : "text-[#C44934]",
-  ].join(" ")}
->
-  Joueur {player.player_order}
-</p>
+              className={[
+                "text-xs font-black uppercase tracking-widest",
+                tournamentTheme
+                ? tournamentTheme.accentText
+                : "text-[#C44934]",
+              ].join(" ")}
+              >
+              Joueur {player.player_order}
+              </p>
               
               <h2 className="mt-2 text-2xl font-black">
               {player.name}
@@ -567,6 +578,8 @@ export default function PlayerAccessPage() {
                     ? "Démarrer le match"
                     : salon.competition_type === "grand_prix"
                     ? "Démarrer le Grand Prix"
+                    : salon.competition_type === "basket"
+                    ? "Démarrer le match"
                     : "Démarrer le set"}
                     </button>
                     </div>

@@ -35,13 +35,33 @@ export const PERFORMANCE_6COLS_MILESTONES = [1400, 1500, 1550, 1600, 1650, 1700,
 export const EXPLOIT_3COLS_MILESTONES = [1000];
 export const EXPLOIT_WIN_STREAK = [10];
 export const EXPLOIT_6COLS_MILESTONES = [2000];
-
+export const BASKET_XP = {
+  quarterWin: 5,
+  matchWin: 25,
+  competitionWin: 100,
+  sweep: 30,
+};
 export const GRAND_PRIX_MILESTONES = [
   1, 3, 5, 10, 25, 50, 100, 250,
 ];
 
 export const GRAND_PRIX_TITLE_MILESTONES = [
   1, 2, 3, 5, 10, 25, 50, 100,
+];
+export const BASKET_COMPETITION_MILESTONES = [
+  1, 3, 5, 10, 25, 50, 100, 250,
+];
+
+export const BASKET_MATCH_MILESTONES = [
+  1, 10, 25, 50, 100, 250, 500, 1000,
+];
+
+export const BASKET_QUARTER_MILESTONES = [
+  1, 10, 50, 100, 250, 500, 1000, 2500,
+];
+
+export const BASKET_SWEEP_MILESTONES = [
+  1, 3, 5, 10, 25, 50, 100, 250,
 ];
 export const PERFORMANCE_BADGE_XP = [
   10,
@@ -213,7 +233,7 @@ export const achievementDefinitions: readonly AchievementDefinition[] = [
   id: "grand_prix_played",
   label: "Grands Prix disputés",
   metric: "grand_prix_played",
-  milestones: GRAND_PRIX_MILESTONES,
+  milestones: GRAND_PRIX_TITLE_MILESTONES,
 },
 {
   id: "grand_prix_wins",
@@ -238,6 +258,42 @@ export const achievementDefinitions: readonly AchievementDefinition[] = [
   label: "Titres de champion Grand Prix",
   metric: "grand_prix_titles",
   milestones: GRAND_PRIX_MILESTONES,
+},
+{
+  id: "basket_competitions",
+  label: "Compétitions Basket disputées",
+  metric: "basket_competitions",
+  milestones: BASKET_COMPETITION_MILESTONES,
+},
+{
+  id: "basket_competition_wins",
+  label: "Compétitions Basket remportées",
+  metric: "basket_competition_wins",
+  milestones: BASKET_COMPETITION_MILESTONES,
+},
+{
+  id: "basket_matches",
+  label: "Matchs Basket disputés",
+  metric: "basket_matches",
+  milestones: BASKET_MATCH_MILESTONES,
+},
+{
+  id: "basket_match_wins",
+  label: "Matchs Basket remportés",
+  metric: "basket_match_wins",
+  milestones: BASKET_MATCH_MILESTONES,
+},
+{
+  id: "basket_quarter_wins",
+  label: "Quart-temps remportés",
+  metric: "basket_quarter_wins",
+  milestones: BASKET_QUARTER_MILESTONES,
+},
+{
+  id: "basket_sweeps",
+  label: "Sweeps 4–0",
+  metric: "basket_sweeps",
+  milestones: BASKET_SWEEP_MILESTONES,
 },
 ] ;
 

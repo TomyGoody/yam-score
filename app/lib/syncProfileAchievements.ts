@@ -72,6 +72,14 @@ export async function syncProfileAchievements(
     afin que achievementDefinitions utilise immédiatement la bonne valeur.
   */
   if (Number(stats.career_grand_slam ?? 0) !== careerGrandSlam) {
+  // On met toujours la valeur à jour dans l'objet utilisé
+  // pour calculer immédiatement les succès.
+  stats.career_grand_slam = careerGrandSlam;
+
+  // En mode normal, le joueur peut mettre à jour sa propre ligne.
+  // En mode rebuild admin, on ne bloque surtout pas toute la
+  // synchronisation des succès sur cette update RLS.
+  if (!options?.admin) {
     const { error: careerGrandSlamError } = await supabase
       .from("profile_stats")
       .update({
@@ -84,18 +92,25 @@ export async function syncProfileAchievements(
         "Erreur mise à jour Grand Chelem en carrière",
         careerGrandSlamError
       );
-
-      return {
-        xpAwarded: 0,
-        unlockedBadges: [],
-      };
     }
-
-    stats.career_grand_slam = careerGrandSlam;
   }
+}
 
   const potentialBadges = getAllUnlockedBadges(stats);
-
+console.log("POTENTIAL BADGES SYNC", {
+  profileId,
+  basketStats: {
+    basket_competitions: stats.basket_competitions,
+    basket_competition_wins: stats.basket_competition_wins,
+    basket_matches: stats.basket_matches,
+    basket_match_wins: stats.basket_match_wins,
+    basket_quarter_wins: stats.basket_quarter_wins,
+    basket_sweeps: stats.basket_sweeps,
+  },
+  basketBadges: potentialBadges.filter((badge) =>
+    badge.id.startsWith("basket_")
+  ),
+});
   const claimRpcName = options?.admin
   ? "claim_profile_badges_admin"
   : "claim_profile_badges";
@@ -107,7 +122,12 @@ const { data: claimedBadges, error: claimError } = await supabase.rpc(
     p_badges: potentialBadges,
   }
 );
-
+console.log("CLAIMED BADGES SYNC", {
+  profileId,
+  claimRpcName,
+  claimedBadges,
+  claimError,
+});
   if (claimError) {
   console.error("Erreur claim badges sync", {
     profileId,

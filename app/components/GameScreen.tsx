@@ -67,10 +67,7 @@ setHighContrast: (
     ? getGrandPrixCircuitTheme(competitionHeader.circuitId)
     : getTournamentTheme(competitionHeader.theme)
   : null;
-  console.log({
-  competitionHeader,
-  tournamentTheme,
-});
+  
 
   return (
     <section
@@ -90,19 +87,23 @@ setHighContrast: (
     />
 
     <div
-  className={[
-    "pointer-events-none absolute inset-0",
-    competitionHeader?.competitionType === "grand_prix"
-      ? "bg-black/65"
-      : "bg-black/45",
-  ].join(" ")}
-/>
+      className={[
+        "pointer-events-none absolute inset-0",
+        competitionHeader?.competitionType === "grand_prix"
+          ? "bg-black/20"
+          : competitionHeader?.competitionType === "basket"
+            ? "bg-black/20"
+            : "bg-black/20",
+      ].join(" ")}
+    />
 
     <div
       className="pointer-events-none absolute inset-0"
       style={{
         background:
-          "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.52) 55%, rgba(0,0,0,0.80) 100%)",
+          competitionHeader?.competitionType === "basket"
+            ? "linear-gradient(180deg, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.12) 50%, rgba(0,0,0,0.38) 100%)"
+            : "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.52) 55%, rgba(0,0,0,0.80) 100%)",
       }}
     />
 
@@ -392,19 +393,91 @@ style={{
     <div className="rounded-lg border border-white/20 bg-black/20 px-5 py-2 text-base font-black">
       🏎️ {players.length} pilotes
     </div>
-  ) : (
+  ) : competition.competitionType === "basket" ? (
+  <div className="flex items-center gap-4">
+    <div className="flex items-center gap-2">
+      <span
+        className="h-3 w-3 rounded-full"
+        style={{ backgroundColor: "#F47B20" }}
+      />
+
+      <span
+        className="text-xl font-black tracking-wide"
+        style={{ color: "#FF9A4A" }}
+      >
+        Équipe A
+      </span>
+    </div>
+
+    <div
+      className="flex min-w-[110px] flex-col items-center rounded-xl border px-4 py-1.5"
+      style={{
+        borderColor: "rgba(232,117,36,0.45)",
+        backgroundColor: "rgba(0,0,0,0.28)",
+      }}
+    >
+      <div className="text-xl font-black text-white">
+        {competition.teamAPoints}
+        <span className="mx-2 text-white/40">-</span>
+        {competition.teamBPoints}
+      </div>
+
+      {competition.currentQuarter && (
+  <>
+    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/60">
+      Q{competition.currentQuarter}
+    </div>
+
+    <div className="mt-1 flex items-center gap-2">
+  <span
+    className="text-base font-black"
+    style={{ color: "#FF9A4A" }}
+  >
+    {competition.currentQuarterTeamAScore}
+  </span>
+
+  <span className="text-xs font-black text-white/35">
+    -
+  </span>
+
+  <span
+    className="text-base font-black"
+    style={{ color: "#60A5FA" }}
+  >
+    {competition.currentQuarterTeamBScore}
+  </span>
+</div>
+  </>
+)}
+    </div>
+
+    <div className="flex items-center gap-2">
+      <span
+        className="text-xl font-black tracking-wide"
+        style={{ color: "#60A5FA" }}
+      >
+        Équipe B
+      </span>
+
+      <span
+        className="h-3 w-3 rounded-full"
+        style={{ backgroundColor: "#3B82F6" }}
+      />
+    </div>
+  </div>
+) : (
     <>
       <span className="max-w-[180px] truncate text-xl font-black tracking-wide">
         {player1?.name ?? "Joueur 1"}
       </span>
 
-      {competition.competitionType === "world_cup" ? (
-        <div className="rounded-xl border border-[#D4A74A] bg-[#D4A74A]/10 px-5 py-2 text-base font-black tracking-[0.18em] text-[#FFF2BF] shadow-[0_0_20px_rgba(244,197,66,0.22)]">
-          VS
-        </div>
-      ) : (
+      {competition.competitionType === "grand_slam_final" ? (
         <div className="rounded-lg border border-white/20 bg-black/20 px-3 py-1 text-base font-black">
           {competition.player1SetsWon}–{competition.player2SetsWon}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-[#D4A74A] bg-[#D4A74A]/10 px-5 py-2 text-base font-black tracking-[0.18em] text-[#FFF2BF] shadow-[0_0_20px_rgba(244,197,66,0.22)]">
+          VS
         </div>
       )}
 
@@ -520,7 +593,9 @@ style={{
   ? "Voir le tableau"
   : competition.competitionType === "grand_prix"
     ? "Voir la saison"
-    : "Voir la finale"}
+    : competition.competitionType === "basket"
+      ? "Voir la compétition"
+      : "Voir la finale"}
     </button>
   )}
 

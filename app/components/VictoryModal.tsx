@@ -10,6 +10,7 @@ type VictoryPlayer = {
   rank: number;
   player_order?: number;
   playerOrder?: number;
+  basketTeam?: "A" | "B" | null;
 };
 
 type XpResult = {
@@ -37,6 +38,8 @@ export default function VictoryModal({
   competitionType,
   competitionFinished,
   isFinalizing,
+  basketQuarterScores,
+  basketPoints,
 }: {
   players: VictoryPlayer[];
   xpResults: Record<string, XpResult>;
@@ -44,12 +47,24 @@ export default function VictoryModal({
   onViewGrid?: () => void;
   tournamentTheme?: TournamentThemeConfig | null;
   competitionType?:
-  | "world_cup"
   | "grand_slam_final"
+  | "world_cup"
   | "grand_prix"
+  | "basket"
   | null;
   competitionFinished?: boolean;
   isFinalizing?: boolean;
+  basketQuarterScores?: {
+  1: { teamA: number; teamB: number };
+  2: { teamA: number; teamB: number };
+  3: { teamA: number; teamB: number };
+  4: { teamA: number; teamB: number };
+} | null;
+
+basketPoints?: {
+  teamA: number;
+  teamB: number;
+} | null;
 }) {
   const [selectedXpPlayerId, setSelectedXpPlayerId] = useState<string | null>(null);
 const isGrandSlam =
@@ -59,10 +74,43 @@ const isWorldCup =
   competitionType === "world_cup";
 const isGrandPrix =
   competitionType === "grand_prix";
+  const isBasket =
+  competitionType === "basket";
 const isWorldCupChampion =
   isWorldCup && competitionFinished;
 
 const winner = players[0] ?? null;
+const basketTeamAPlayers = players.filter(
+  (player) => player.basketTeam === "A"
+);
+
+const basketTeamBPlayers = players.filter(
+  (player) => player.basketTeam === "B"
+);
+
+const basketTeamAScore = basketTeamAPlayers.reduce(
+  (total, player) => total + player.total,
+  0
+);
+
+const basketTeamBScore = basketTeamBPlayers.reduce(
+  (total, player) => total + player.total,
+  0
+);
+
+const basketWinner =
+  basketTeamAScore > basketTeamBScore
+    ? "A"
+    : basketTeamBScore > basketTeamAScore
+      ? "B"
+      : null;
+      const basketTeamAFinalPoints =
+  (basketPoints?.teamA ?? 0) +
+  (basketWinner === "A" ? 4 : 0);
+
+const basketTeamBFinalPoints =
+  (basketPoints?.teamB ?? 0) +
+  (basketWinner === "B" ? 4 : 0);
 const GRAND_PRIX_POINTS = [25, 18, 15, 12, 10, 8];
 
 function getGrandPrixPoints(rank: number) {
@@ -143,7 +191,9 @@ function getGrandPrixPoints(rank: number) {
       ? "Set remporté"
       : isGrandPrix
         ? "Grand Prix terminé"
-        : "Partie terminée"}
+        : isBasket
+          ? "Match terminé"
+          : "Partie terminée"}
 </p>
 
 <h2 className="mt-2 text-3xl font-black">
@@ -155,7 +205,11 @@ function getGrandPrixPoints(rank: number) {
       ? winner?.name
       : isGrandPrix
         ? winner?.name
-        : "Classement final"}
+        : isBasket
+  ? basketWinner
+    ? `Équipe ${basketWinner} remporte le match`
+    : "Match nul"
+          : "Classement final"}
 </h2>
 {isGrandPrix && tournamentTheme && (
   <p className="mt-2 text-white/70">
@@ -180,8 +234,87 @@ function getGrandPrixPoints(rank: number) {
   </p>
 )}
 
-        <div className="mt-6 grid gap-3">
-          {players.map((player) => {
+        {isBasket ? (
+  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+    <div
+      className={[
+        "rounded-2xl border-2 p-5 text-center",
+        basketWinner === "A"
+          ? "border-amber-300 bg-amber-300/15"
+          : "border-white/20 bg-black/25",
+      ].join(" ")}
+    >
+      <div className="text-sm font-black uppercase tracking-[0.25em] opacity-70">
+        Équipe A
+      </div>
+
+      <div className="mt-2 text-5xl font-black">
+        {basketTeamAScore}
+      </div>
+
+      <div className="mt-2 h-5 text-sm font-black text-amber-300">
+  {basketWinner === "A" ? "🏆 Vainqueur" : ""}
+</div>
+
+<div className="mt-4 space-y-1 text-sm">
+        {basketTeamAPlayers.map((player) => (
+          <div
+            key={player.id}
+            className="flex items-center justify-between gap-3"
+          >
+            <span className="truncate font-black">
+              {player.name}
+            </span>
+
+            <span className="font-black opacity-70">
+              {player.total}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <div
+      className={[
+        "rounded-2xl border-2 p-5 text-center",
+        basketWinner === "B"
+          ? "border-amber-300 bg-amber-300/15"
+          : "border-white/20 bg-black/25",
+      ].join(" ")}
+    >
+      <div className="text-sm font-black uppercase tracking-[0.25em] opacity-70">
+        Équipe B
+      </div>
+
+      <div className="mt-2 text-5xl font-black">
+        {basketTeamBScore}
+      </div>
+
+      <div className="mt-2 h-5 text-sm font-black text-amber-300">
+  {basketWinner === "B" ? "🏆 Vainqueur" : ""}
+</div>
+
+<div className="mt-4 space-y-1 text-sm">
+        {basketTeamBPlayers.map((player) => (
+          <div
+            key={player.id}
+            className="flex items-center justify-between gap-3"
+          >
+            <span className="truncate font-black">
+              {player.name}
+            </span>
+
+            <span className="font-black opacity-70">
+              {player.total}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+) : (
+  <div className="mt-6 grid gap-3">
+    {players.map((player) => {
             const xp = xpResults[player.id];
             const grandPrixPoints = isGrandPrix
   ? getGrandPrixPoints(player.rank)
@@ -233,6 +366,7 @@ const useDarkXpText =
       +{grandPrixPoints} pts championnat
     </div>
   )}
+ 
 </div>
                 </div>
 
@@ -324,9 +458,179 @@ const useDarkXpText =
 ) : null}
               </div>
             );
-          })}
-        </div>
+              })}
+  </div>
+)}
+{isBasket && basketQuarterScores && basketPoints && (
+  <div className="mt-5 rounded-2xl border border-white/15 bg-black/25 p-4">
+    <div className="mb-3 text-sm font-black uppercase tracking-[0.2em] text-white/70">
+      Détail du match
+    </div>
 
+    <div className="grid grid-cols-4 gap-2">
+      {([1, 2, 3, 4] as const).map((quarter) => {
+        const score = basketQuarterScores[quarter];
+
+        const winner =
+          score.teamA > score.teamB
+            ? "A"
+            : score.teamB > score.teamA
+              ? "B"
+              : null;
+
+        return (
+          <div
+            key={quarter}
+            className="min-w-0 rounded-xl border border-white/10 bg-black/20 px-1 py-2 text-center"
+          >
+            <div className="text-[10px] font-black uppercase tracking-wider text-white/50">
+              Q{quarter}
+            </div>
+
+           <div className="mt-1 flex min-w-0 items-center justify-center gap-1 whitespace-nowrap text-[13px] font-black tracking-tight">
+  <span
+    className={
+      winner === "A"
+        ? "text-amber-300"
+        : ""
+    }
+  >
+    {score.teamA}
+  </span>
+
+  <span className="text-white/40">
+    -
+  </span>
+
+  <span
+    className={
+      winner === "B"
+        ? "text-amber-300"
+        : ""
+    }
+  >
+    {score.teamB}
+  </span>
+</div>
+
+            <div className="mt-1 text-[9px] font-black text-white/40">
+              {winner
+                ? `Équipe ${winner}`
+                : "Égalité"}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+
+    <div className="mt-3 flex items-center justify-between rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+      <div className="text-xs font-black uppercase tracking-wider text-white/50">
+        Points Basket
+      </div>
+
+      <div className="text-xl font-black">
+        <span className="text-orange-300">
+          {basketTeamAFinalPoints}
+        </span>
+
+        <span className="mx-3 text-white/40">
+          -
+        </span>
+
+        <span className="text-blue-300">
+          {basketTeamBFinalPoints}
+        </span>
+      </div>
+    </div>
+  </div>
+)}
+ {isBasket && (
+  <div className="mt-5">
+    <div className="mb-3 text-sm font-black uppercase tracking-[0.2em] text-white/70">
+      Progression des joueurs
+    </div>
+
+    <div className="grid gap-2">
+      {players.map((player) => {
+        const xp = xpResults[player.id];
+
+        if (!xp) {
+          return null;
+        }
+
+        return (
+          <div
+            key={player.id}
+            className="rounded-xl border border-white/15 bg-black/25 p-3"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedXpPlayerId(
+                  selectedXpPlayerId === player.id
+                    ? null
+                    : player.id
+                )
+              }
+              className="flex w-full items-center justify-between gap-4 text-left font-black"
+            >
+              <div>
+                <div className="text-sm">
+                  {player.name}
+                </div>
+
+                <div className="mt-0.5 text-xs opacity-60">
+                  Équipe {player.basketTeam}
+                </div>
+              </div>
+
+              <div className="text-right">
+                <div className="text-sm">
+                  ⭐ Niveau {xp.newLevel}
+                </div>
+
+                <div className="mt-0.5 text-xs text-amber-300">
+                  +{xp.xpGain} XP{" "}
+                  {selectedXpPlayerId === player.id
+                    ? "▲"
+                    : "▼"}
+                </div>
+              </div>
+            </button>
+
+            {selectedXpPlayerId === player.id && (
+              <div className="mt-3 border-t border-white/10 pt-3 text-xs font-black">
+                <div className="flex justify-between">
+                  <span>Progression</span>
+                  <span>+{xp.baseXp} XP</span>
+                </div>
+
+                <div className="mt-2 flex justify-between">
+                  <span>Succès</span>
+                  <span>+{xp.badgeXp} XP</span>
+                </div>
+
+                {xp.badges.length > 0 && (
+                  <div className="mt-3 space-y-1 text-white/70">
+                    {xp.badges.map((badge) => (
+                      <div
+                        key={`${badge.label}-${badge.milestone}`}
+                      >
+                        🏅 {badge.label} · {badge.milestone}
+                        {" "}
+                        (+{badge.xp} XP)
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
   {onViewGrid && (
     <button
@@ -359,8 +663,10 @@ const useDarkXpText =
       : isGrandSlam
         ? "Retour à la finale"
         : isGrandPrix
-          ? "Retour à la saison"
-          : "Retour accueil"}
+  ? "Retour à la saison"
+  : isBasket
+    ? "Retour à la compétition"
+    : "Retour accueil"}
   </button>
 </div>
 </div>

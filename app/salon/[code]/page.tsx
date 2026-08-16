@@ -32,6 +32,7 @@ type Player = {
   player_order: number;
   profile_id: string | null;
   competition_player_id: string | null;
+  basketTeam: "A" | "B" | null;
 };
 type ScoreValue = number | "X" | null;
 
@@ -102,15 +103,29 @@ export default function SalonAdminPage() {
   useState<string | null>(null);
   const [competitionType, setCompetitionType] =
   useState<
-  "grand_slam_final" |
-  "world_cup" |
-  "grand_prix" |
-  null
+    | "grand_slam_final"
+    | "world_cup"
+    | "grand_prix"
+    | "basket"
+    | null
   >(null);
-  
+  const [
+  showBasketQuarterModal,
+  setShowBasketQuarterModal,
+] = useState(false);
+
+const [
+  finishedBasketQuarter,
+  setFinishedBasketQuarter,
+] = useState<1 | 2 | 3 | null>(null);
+
+const previousBasketQuarterRef =
+  useRef<1 | 2 | 3 | 4 | null>(null);
   const [competitionMatchId, setCompetitionMatchId] =
   useState<string | null>(null);
   const [competitionGrandPrixId, setCompetitionGrandPrixId] =
+  useState<string | null>(null);
+  const [competitionBasketMatchId, setCompetitionBasketMatchId] =
   useState<string | null>(null);
   const [competitionRoundNumber, setCompetitionRoundNumber] =
   useState<number | null>(null);
@@ -120,9 +135,53 @@ export default function SalonAdminPage() {
   const [isWorldCupFinal, setIsWorldCupFinal] =
   useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [basketTeamByPlayerId, setBasketTeamByPlayerId] =
+  useState<Record<string, "A" | "B">>({});
+
+const [basketQuarterScores, setBasketQuarterScores] =
+  useState<Record<
+    1 | 2 | 3 | 4,
+    {
+      teamA: number;
+      teamB: number;
+    }
+  >>({
+    1: { teamA: 0, teamB: 0 },
+    2: { teamA: 0, teamB: 0 },
+    3: { teamA: 0, teamB: 0 },
+    4: { teamA: 0, teamB: 0 },
+  });
+ 
+
+
+const basketRawTotals = {
+  teamA: Object.values(basketQuarterScores).reduce(
+    (total, quarter) => total + quarter.teamA,
+    0
+  ),
+  teamB: Object.values(basketQuarterScores).reduce(
+    (total, quarter) => total + quarter.teamB,
+    0
+  ),
+};
+
   const [playerCount, setPlayerCount] = useState(0);
   const [status, setStatus] = useState<"waiting" | "playing" | "finished">("waiting");
   const [message, setMessage] = useState("");
+  useEffect(() => {
+  if (competitionType !== "basket") return;
+
+  setPlayers((current) =>
+    current.map((player) => ({
+      ...player,
+      basketTeam:
+        basketTeamByPlayerId[player.id] ?? null,
+    }))
+  );
+}, [
+  basketTeamByPlayerId,
+  competitionType,
+]);
   useEffect(() => {
   const savedHighContrast =
     localStorage.getItem("yam-score-high-contrast") === "true";
@@ -190,9 +249,10 @@ useEffect(() => {
     }
     
     const type = competition.competition_type as
-    | "grand_slam_final"
-    | "world_cup"
-    | "grand_prix";
+  | "grand_slam_final"
+  | "world_cup"
+  | "grand_prix"
+  | "basket";
     
     setCompetitionType(type);
     if (type !== "grand_prix") {
@@ -257,6 +317,56 @@ useEffect(() => {
       
       return;
     }
+    if (type === "basket") {
+  const {
+    data: basketMatch,
+    error: basketMatchError,
+  } = await supabase
+    .from("competition_basket_matches")
+    .select("id, match_number")
+    .eq("competition_id", id)
+    .eq("game_id", gameId)
+    .maybeSingle();
+
+  if (basketMatchError || !basketMatch) {
+    console.error(
+      "Erreur chargement du match Basket du Salon",
+      basketMatchError
+    );
+
+    setCompetitionBasketMatchId(null);
+    return;
+  }
+
+  setCompetitionBasketMatchId(
+    basketMatch.id
+  );
+
+  setCompetitionMatchId(null);
+  setCompetitionGrandPrixId(null);
+
+  setCompetitionHeader({
+    competitionId: id,
+    competitionType: "basket",
+
+    roundNumber: basketMatch.match_number,
+    roundLabel: `Match ${basketMatch.match_number}`,
+
+    theme: "basket",
+    tournamentName: "Basket",
+
+    
+
+    currentQuarter: 1,
+    currentQuarterTeamAScore: 0,
+    currentQuarterTeamBScore: 0,
+
+    teamAPoints: 0,
+    teamBPoints: 0,
+  });
+
+  return;
+}
     if (type === "grand_prix") {
       const { data: grandPrix, error: grandPrixError } =
       await supabase
@@ -407,7 +517,9 @@ if (finishedGrandPrixError) {
     }
     
     // 2. LOAD PLAYERS
-    async function loadPlayers(id: string) {
+    async function loadPlayers(
+  id: string
+): Promise<Record<string, "A" | "B">> {
       const { data } = await supabase
       .from("yam_players")
       .select("*")
@@ -423,15 +535,71 @@ if (finishedGrandPrixError) {
     profile_id: player.profile_id ?? null,
     competition_player_id:
       player.competition_player_id ?? null,
+
+    basketTeam:
+      basketTeamByPlayerId[player.id] ?? null,
   }))
 );
+if (competitionType === "basket") {
+  const {
+    data: basketTeams,
+    error: basketTeamsError,
+  } = await supabase.rpc(
+    "get_salon_basket_teams",
+    {
+      p_game_id: id,
     }
-    async function loadScores(id: string) {
+  );
+
+  if (basketTeamsError) {
+    console.error(
+      "Erreur chargement équipes Basket Salon",
+      basketTeamsError
+    );
+
+    setBasketTeamByPlayerId({});
+    return {};
+  }
+
+  const nextTeamByPlayerId: Record<
+    string,
+    "A" | "B"
+  > = {};
+
+  for (const item of basketTeams ?? []) {
+    if (
+      item.team !== "A" &&
+      item.team !== "B"
+    ) {
+      continue;
+    }
+
+    nextTeamByPlayerId[item.player_id] =
+      item.team;
+  }
+
+  setBasketTeamByPlayerId(
+    nextTeamByPlayerId
+  );
+
+  return nextTeamByPlayerId;
+}
+
+return {};
+
+
+    }
+    async function loadScores(
+  id: string,
+  basketTeams?: Record<string, "A" | "B">
+) {
       const { data, error } = await supabase
       .from("yam_scores")
-      .select("player_id, column_id, row_id, value")
+      .select(
+  "player_id, column_id, row_id, value, basket_quarter"
+)
       .eq("game_id", id);
-      
+     
       if (error) {
         console.error(error);
         return;
@@ -451,7 +619,65 @@ if (finishedGrandPrixError) {
           },
         };
       });
-      
+      if (competitionType === "basket") {
+  const nextQuarterScores = {
+    1: { teamA: 0, teamB: 0 },
+    2: { teamA: 0, teamB: 0 },
+    3: { teamA: 0, teamB: 0 },
+    4: { teamA: 0, teamB: 0 },
+  };
+
+  for (const score of data ?? []) {
+    const quarter =
+      score.basket_quarter as
+        | 1
+        | 2
+        | 3
+        | 4
+        | null;
+
+    if (!quarter) continue;
+
+    const team =
+  basketTeams?.[score.player_id] ??
+  basketTeamByPlayerId[score.player_id];
+
+    if (!team) continue;
+
+    if (score.value === "X") {
+      continue;
+    }
+
+    const value = Number(score.value);
+
+    if (Number.isNaN(value)) {
+      continue;
+    }
+
+    if (team === "A") {
+      nextQuarterScores[quarter].teamA +=
+        value;
+    } else {
+      nextQuarterScores[quarter].teamB +=
+        value;
+    }
+  }
+console.log("BASKET SCORES DEBUG", {
+  basketTeamsUsed: basketTeams,
+  scores: data,
+  nextQuarterScores,
+});
+
+
+
+  setBasketQuarterScores(
+    nextQuarterScores
+  );
+}
+
+
+
+
       setScores(nextScores);
     }
     // 3. START GAME
@@ -511,11 +737,32 @@ if (finishedGrandPrixError) {
       loadSalon();
     }, []);
     
-    useEffect(() => {
-      if (!gameId) return;
-      loadPlayers(gameId);
-      loadScores(gameId);
-    }, [gameId]);
+   useEffect(() => {
+  if (!gameId) return;
+
+  // Pour une compétition, on attend que son type soit chargé
+  if (competitionId && !competitionType) {
+    return;
+  }
+
+  const currentGameId = gameId;
+
+  async function loadGameData() {
+    const basketTeams =
+      await loadPlayers(currentGameId);
+
+    await loadScores(
+      currentGameId,
+      basketTeams
+    );
+  }
+
+  void loadGameData();
+}, [
+  gameId,
+  competitionType,
+  competitionId,
+]);
     useEffect(() => {
       function updateLayout() {
         const viewport = viewportRef.current;
@@ -596,14 +843,18 @@ if (finishedGrandPrixError) {
       };
     }, [fitToScreen, players.length, gameMode]);
     async function resyncSalon() {
-      if (!gameId) return;
-      
-      await Promise.all([
-        loadScores(gameId),
-        loadPlayers(gameId),
-        loadSalon(),
-      ]);
-    }
+  if (!gameId) return;
+
+  await loadSalon();
+
+  const basketTeams =
+    await loadPlayers(gameId);
+
+  await loadScores(
+    gameId,
+    basketTeams
+  );
+}
     useEffect(() => {
       if (!gameId) return;
       
@@ -617,9 +868,15 @@ if (finishedGrandPrixError) {
           table: "yam_scores",
           filter: `game_id=eq.${gameId}`,
         },
-        () => {
-          loadScores(gameId);
-        }
+        async () => {
+  const basketTeams =
+    await loadPlayers(gameId);
+
+  await loadScores(
+    gameId,
+    basketTeams
+  );
+}
       )
       .subscribe((status) => {
         console.log("CHANNEL STATUS =", status);
@@ -641,7 +898,10 @@ if (finishedGrandPrixError) {
       return () => {
         supabase.removeChannel(channel);
       };
-    }, [gameId]);
+    }, [
+  gameId,
+  competitionType,
+]);
     useEffect(() => {
       if (!gameId) return;
       
@@ -894,26 +1154,39 @@ if (finishedGrandPrixError) {
       setMessage("Dernier coup annulé.");
     }
     async function simulateSalonGame() {
-      if (!gameId) return;
-      
-      const activeColumns =
-      gameMode === "6cols"
+  if (!gameId) return;
+
+  const activeColumns =
+    gameMode === "6cols"
       ? columns
       : [columns[0], columns[2], columns[4]];
-      
-      for (const row of rows) {
-        for (const player of players.sort(
-          (a, b) => a.player_order - b.player_order
-        )) {
-          for (const column of activeColumns) {
-            const values = getPossibleValues(row.id);
-            
-            const value =
+
+  // Hors Basket : on garde le remplissage complet
+  if (competitionType !== "basket") {
+    for (const row of rows) {
+      for (const player of [...players].sort(
+        (a, b) => a.player_order - b.player_order
+      )) {
+        for (const column of activeColumns) {
+          const currentValue =
+            getScore(player.id, column.id, row.id);
+
+          if (currentValue !== null) {
+            continue;
+          }
+
+          const values = getPossibleValues(row.id);
+
+          const value =
             Math.random() < 0.15
-            ? "X"
-            : values[Math.floor(Math.random() * values.length)];
-            
-            const { error } = await supabase
+              ? "X"
+              : values[
+                  Math.floor(
+                    Math.random() * values.length
+                  )
+                ];
+
+          const { error } = await supabase
             .from("yam_scores")
             .upsert(
               {
@@ -924,20 +1197,159 @@ if (finishedGrandPrixError) {
                 value: String(value),
               },
               {
-                onConflict: "game_id,player_id,column_id,row_id",
+                onConflict:
+                  "game_id,player_id,column_id,row_id",
               }
             );
-            
-            if (error) {
-              console.error(error);
-              return;
-            }
+
+          if (error) {
+            console.error(error);
+            return;
           }
         }
       }
-      
-      await loadScores(gameId);
     }
+
+    await loadScores(
+      gameId,
+      basketTeamByPlayerId
+    );
+
+    return;
+  }
+
+  // -----------------------------
+  // BASKET : remplir 1 QT seulement
+  // -----------------------------
+
+  const movesPerQuarter =
+    gameMode === "3cols"
+      ? [10, 10, 10, 9]
+      : [20, 20, 19, 19];
+
+  const playedMoves =
+    players.length > 0
+      ? Math.min(
+          ...players.map(
+            (player) =>
+              activeColumns.length * rows.length -
+              getRemainingMoves(player.id)
+          )
+        )
+      : 0;
+
+  let quarter: 1 | 2 | 3 | 4;
+
+  if (playedMoves < movesPerQuarter[0]) {
+    quarter = 1;
+  } else if (
+    playedMoves <
+    movesPerQuarter[0] +
+      movesPerQuarter[1]
+  ) {
+    quarter = 2;
+  } else if (
+    playedMoves <
+    movesPerQuarter[0] +
+      movesPerQuarter[1] +
+      movesPerQuarter[2]
+  ) {
+    quarter = 3;
+  } else {
+    quarter = 4;
+  }
+
+  const targetMoves =
+    quarter === 1
+      ? movesPerQuarter[0]
+      : quarter === 2
+        ? movesPerQuarter[0] +
+          movesPerQuarter[1]
+        : quarter === 3
+          ? movesPerQuarter[0] +
+            movesPerQuarter[1] +
+            movesPerQuarter[2]
+          : movesPerQuarter.reduce(
+              (total, value) => total + value,
+              0
+            );
+
+  for (const player of [...players].sort(
+    (a, b) => a.player_order - b.player_order
+  )) {
+    let playerPlayedMoves =
+      activeColumns.length * rows.length -
+      getRemainingMoves(player.id);
+
+    if (playerPlayedMoves >= targetMoves) {
+      continue;
+    }
+
+    for (const row of rows) {
+      for (const column of activeColumns) {
+        if (playerPlayedMoves >= targetMoves) {
+          break;
+        }
+
+        const currentValue =
+          getScore(
+            player.id,
+            column.id,
+            row.id
+          );
+
+        if (currentValue !== null) {
+          continue;
+        }
+
+        const values =
+          getPossibleValues(row.id);
+
+        const value =
+          Math.random() < 0.15
+            ? "X"
+            : values[
+                Math.floor(
+                  Math.random() *
+                    values.length
+                )
+              ];
+
+        const { error } = await supabase
+          .from("yam_scores")
+          .upsert(
+            {
+              game_id: gameId,
+              player_id: player.id,
+              column_id: column.id,
+              row_id: row.id,
+              value: String(value),
+
+              // IMPORTANT :
+              // ce score appartient au QT simulé
+              basket_quarter: quarter,
+            },
+            {
+              onConflict:
+                "game_id,player_id,column_id,row_id",
+            }
+          );
+
+        if (error) {
+          console.error(error);
+          return;
+        }
+
+        playerPlayedMoves += 1;
+      }
+    }
+  }
+
+  await loadScores(
+    gameId,
+    basketTeamByPlayerId
+  );
+}
     async function saveSalonToProfiles(): Promise<boolean> {
       if (!gameId) {
         console.error("Sauvegarde impossible : gameId absent");
@@ -1027,7 +1439,7 @@ if (finishedGrandPrixError) {
       .select("id, name, final_score")
       .eq("game_id", gameId);
       
-      console.log("FINAL SCORES SAVED", test);
+      
       await loadPlayers(gameId);
       const { error: playersError } = await supabase
       .from("local_game_players")
@@ -1270,6 +1682,85 @@ if (finishedGrandPrixError) {
 const gameFinished =
 players.length > 0 &&
 players.every((player) => getRemainingMoves(player.id) === 0);
+const totalMovesPerPlayer =
+  activeColumns.length * rows.length;
+
+const playedMovesPerPlayer =
+  players.length > 0
+    ? Math.min(
+        ...players.map(
+          (player) =>
+            totalMovesPerPlayer -
+            getRemainingMoves(player.id)
+        )
+      )
+    : 0;
+
+const currentBasketQuarter: 1 | 2 | 3 | 4 =
+  gameMode === "3cols"
+    ? playedMovesPerPlayer < 10
+      ? 1
+      : playedMovesPerPlayer < 20
+        ? 2
+        : playedMovesPerPlayer < 30
+          ? 3
+          : 4
+    : playedMovesPerPlayer < 20
+      ? 1
+      : playedMovesPerPlayer < 40
+        ? 2
+        : playedMovesPerPlayer < 59
+          ? 3
+          : 4;
+
+const basketQuarterPoints = {
+  teamA: 0,
+  teamB: 0,
+};
+useEffect(() => {
+  if (competitionType !== "basket") {
+    previousBasketQuarterRef.current = null;
+    return;
+  }
+
+  const previousQuarter =
+    previousBasketQuarterRef.current;
+
+  if (
+    previousQuarter !== null &&
+    currentBasketQuarter > previousQuarter &&
+    previousQuarter <= 3
+  ) {
+    setFinishedBasketQuarter(
+      previousQuarter as 1 | 2 | 3
+    );
+
+    setShowBasketQuarterModal(true);
+  }
+
+  previousBasketQuarterRef.current =
+    currentBasketQuarter;
+}, [
+  currentBasketQuarter,
+  competitionType,
+]);
+for (const quarter of [1, 2, 3, 4] as const) {
+  if (
+    quarter >= currentBasketQuarter &&
+    !gameFinished
+  ) {
+    continue;
+  }
+
+  const score =
+    basketQuarterScores[quarter];
+
+  if (score.teamA > score.teamB) {
+    basketQuarterPoints.teamA += 1;
+  } else if (score.teamB > score.teamA) {
+    basketQuarterPoints.teamB += 1;
+  }
+}
 useEffect(() => {
   async function finishGame() {
     if (!gameId) return;
@@ -1282,13 +1773,7 @@ useEffect(() => {
     
     salonSavingRef.current = true;
     
-    console.log("🏁 Finalisation de la partie", {
-      gameId,
-      currentUserId,
-      players: players.length,
-      gameFinished,
-      status,
-    });
+    
     
     try {
       const saved = await saveSalonToProfiles();
@@ -1354,7 +1839,80 @@ useEffect(() => {
           
           competitionResult = response.data;
           competitionError = response.error;
-        } else if (competitionType === "grand_prix") {
+        } else if (competitionType === "basket") {
+  if (!competitionBasketMatchId) {
+    console.error(
+      "Impossible de terminer le match Basket : competitionBasketMatchId absent"
+    );
+
+    setMessage(
+      "La partie est enregistrée, mais le match Basket est introuvable."
+    );
+
+    return;
+  }
+
+  const leaderboard = getLeaderboard();
+
+  const teamAFinalScore = leaderboard
+    .filter(
+      (player) =>
+        basketTeamByPlayerId[player.id] === "A"
+    )
+    .reduce(
+      (total, player) =>
+        total + player.total,
+      0
+    );
+
+  const teamBFinalScore = leaderboard
+    .filter(
+      (player) =>
+        basketTeamByPlayerId[player.id] === "B"
+    )
+    .reduce(
+      (total, player) =>
+        total + player.total,
+      0
+    );
+
+  const winnerTeam =
+    teamAFinalScore > teamBFinalScore
+      ? "A"
+      : teamBFinalScore > teamAFinalScore
+        ? "B"
+        : null;
+
+  const response = await supabase.rpc(
+    "finish_basket_match",
+    {
+      p_competition_id: competitionId,
+      p_basket_match_id:
+        competitionBasketMatchId,
+      p_game_id: gameId,
+
+      p_team_a_final_score:
+        teamAFinalScore,
+
+      p_team_b_final_score:
+        teamBFinalScore,
+
+      p_team_a_basket_points:
+        basketQuarterPoints.teamA +
+        (winnerTeam === "A" ? 4 : 0),
+
+      p_team_b_basket_points:
+        basketQuarterPoints.teamB +
+        (winnerTeam === "B" ? 4 : 0),
+
+      p_winner_team: winnerTeam,
+    }
+  );
+
+  competitionResult = response.data;
+  competitionError = response.error;
+
+} else if (competitionType === "grand_prix") {
           if (!competitionGrandPrixId) {
             console.error(
               "Impossible de terminer le Grand Prix : competitionGrandPrixId absent"
@@ -1405,10 +1963,14 @@ useEffect(() => {
           );
           
           setMessage(
-            competitionType === "world_cup"
-            ? "La partie est enregistrée, mais le résultat n’a pas pu être ajouté à la Coupe du Monde."
-            : "La partie est enregistrée, mais le résultat du set n’a pas pu être ajouté à la finale."
-          );
+  competitionType === "world_cup"
+    ? "La partie est enregistrée, mais le résultat n’a pas pu être ajouté à la Coupe du Monde."
+    : competitionType === "basket"
+      ? "La partie est enregistrée, mais le résultat n’a pas pu être ajouté au match Basket."
+      : competitionType === "grand_prix"
+        ? "La partie est enregistrée, mais le résultat n’a pas pu être ajouté au Grand Prix."
+        : "La partie est enregistrée, mais le résultat du set n’a pas pu être ajouté à la finale."
+);
           
           return;
         }
@@ -1423,12 +1985,7 @@ useEffect(() => {
           ),
         });
         
-        console.log(
-          competitionType === "world_cup"
-          ? "Match de Coupe du Monde validé"
-          : "Set de Grand Chelem validé",
-          competitionResult
-        );
+        
       }
       setSalonSavedToProfile(true);
       setStatus("finished");
@@ -1458,6 +2015,9 @@ useEffect(() => {
   competitionType,
   competitionMatchId,
   competitionGrandPrixId,
+  competitionBasketMatchId,
+  basketQuarterScores,
+  basketTeamByPlayerId,
   salonConnected,
 ]);
 if (status === "playing" || status === "finished") {
@@ -1481,43 +2041,76 @@ setHighContrast={setHighContrast}
     }
     onUndoLastMove={undoLastMove}
     quitLabel={
-      competitionId
-      ? competitionType === "world_cup"
+  competitionId
+    ? competitionType === "world_cup" ||
+      competitionType === "basket"
       ? "Quitter le match"
       : competitionType === "grand_prix"
-      ? "Quitter le Grand Prix"
-      : "Quitter le set"
-      : "Quitter"
-    }
+        ? "Quitter le Grand Prix"
+        : "Quitter le set"
+    : "Quitter"
+}
     onOpenPlayerAccess={
       competitionId
       ? () => router.push(`/salon/${code}/access`)
       : undefined
     }
-    competitionHeader={competitionHeader}
+    competitionHeader={
+  competitionHeader?.competitionType === "basket"
+    ? {
+        ...competitionHeader,
+
+        currentQuarter:
+          currentBasketQuarter,
+
+        currentQuarterTeamAScore:
+          basketQuarterScores[
+            currentBasketQuarter
+          ].teamA,
+
+        currentQuarterTeamBScore:
+          basketQuarterScores[
+            currentBasketQuarter
+          ].teamB,
+
+        teamAPoints:
+          basketQuarterPoints.teamA,
+
+        teamBPoints:
+          basketQuarterPoints.teamB,
+      }
+    : competitionHeader
+}
     onBackToCompetition={
-      competitionId
-      ? () => {
+  competitionId
+    ? () => {
         if (competitionType === "world_cup") {
           router.push(
             `/modes-speciaux/coupe-du-monde/${competitionId}`
           );
           return;
         }
-        
+
+        if (competitionType === "basket") {
+          router.push(
+            `/modes-speciaux/basket/${competitionId}`
+          );
+          return;
+        }
+
         if (competitionType === "grand_prix") {
           router.push(
             `/modes-speciaux/grand-prix/${competitionId}`
           );
           return;
         }
-        
+
         router.push(
           `/modes-speciaux/grand-chelem/${competitionId}`
         );
       }
-      : undefined
-    }
+    : undefined
+}
     useSideLeaderboard={useSideLeaderboard}
     viewportRef={viewportRef}
     sheetRef={sheetRef}
@@ -1622,46 +2215,76 @@ setHighContrast={setHighContrast}
           </button>
           
           <button
-          onClick={() => {
-            setShowQuitModal(false);
-            
-            if (competitionId) {
-              if (competitionType === "world_cup") {
-                router.push(
-                  `/modes-speciaux/coupe-du-monde/${competitionId}`
-                );
-                return;
-              }
-              
-              if (competitionType === "grand_prix") {
-                router.push(
-                  `/modes-speciaux/grand-prix/${competitionId}`
-                );
-                return;
-              }
-              
-              router.push(
-                `/modes-speciaux/grand-chelem/${competitionId}`
-              );
-              
-              return;
-            }
-            
-            router.push("/");
-          }}
-          className="rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
-          >
-          Quitter
-          </button>
+  onClick={() => {
+    setShowQuitModal(false);
+
+    if (competitionId) {
+      if (competitionType === "world_cup") {
+        router.push(
+          `/modes-speciaux/coupe-du-monde/${competitionId}`
+        );
+        return;
+      }
+
+      if (competitionType === "basket") {
+        router.push(
+          `/modes-speciaux/basket/${competitionId}`
+        );
+        return;
+      }
+
+      if (competitionType === "grand_prix") {
+        router.push(
+          `/modes-speciaux/grand-prix/${competitionId}`
+        );
+        return;
+      }
+
+      router.push(
+        `/modes-speciaux/grand-chelem/${competitionId}`
+      );
+
+      return;
+    }
+
+    router.push("/");
+  }}
+  className="rounded-xl bg-[#C44934] px-4 py-3 font-black text-white hover:bg-[#D75A43]"
+>
+  Quitter
+</button>
           </div>
           </div>
           </div>
         )}
+        {showBasketQuarterModal &&
+  finishedBasketQuarter && (
+    <BasketQuarterModal
+      quarter={finishedBasketQuarter}
+      scores={
+        basketQuarterScores[
+          finishedBasketQuarter
+        ]
+      }
+      onContinue={() => {
+        setShowBasketQuarterModal(false);
+        setFinishedBasketQuarter(null);
+      }}
+    />
+  )}
         {status === "finished" && showFinalModal && (
           <VictoryModal
-          players={getLeaderboard()}
+          players={getLeaderboard().map((player) => ({
+  ...player,
+  basketTeam:
+    basketTeamByPlayerId[player.id] ?? null,
+}))}
           xpResults={xpResultsByPlayer}
-          
+          basketQuarterScores={basketQuarterScores}
+basketPoints={{
+  teamA: basketQuarterPoints.teamA,
+  teamB: basketQuarterPoints.teamB,
+}}
           tournamentTheme={
             competitionHeader
             ? competitionHeader.competitionType === "grand_prix"
@@ -1691,7 +2314,13 @@ setHighContrast={setHighContrast}
                 
                 return;
               }
-              
+              if (competitionType === "basket") {
+  router.push(
+    `/modes-speciaux/basket/${competitionId}`
+  );
+
+  return;
+}
               if (competitionType === "grand_prix") {
                 const suffix =
                 competitionFinishResult?.competition_finished
@@ -1859,3 +2488,108 @@ setHighContrast={setHighContrast}
         return "US Open";
       }
     }
+    function BasketQuarterModal({
+  quarter,
+  scores,
+  onContinue,
+}: {
+  quarter: 1 | 2 | 3;
+  scores: {
+    teamA: number;
+    teamB: number;
+  };
+  onContinue: () => void;
+}) {
+  const winner =
+    scores.teamA > scores.teamB
+      ? "A"
+      : scores.teamB > scores.teamA
+        ? "B"
+        : null;
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 px-4">
+      <div
+        className="w-full max-w-md rounded-3xl border p-6 text-center text-white shadow-2xl"
+        style={{
+          borderColor: "rgba(232,117,36,0.7)",
+          background:
+            "linear-gradient(180deg, #211008 0%, #0D0906 100%)",
+        }}
+      >
+        <div className="text-5xl">
+          🏀
+        </div>
+
+        <p className="mt-4 text-xs font-black uppercase tracking-[0.28em] text-white/50">
+          Fin du quart-temps
+        </p>
+
+        <h2 className="mt-1 text-4xl font-black">
+          Q{quarter}
+        </h2>
+
+        <div className="mt-6 flex items-center justify-center gap-6">
+          <div>
+            <p
+              className="text-xs font-black uppercase"
+              style={{ color: "#F47B20" }}
+            >
+              Équipe A
+            </p>
+
+            <p className="mt-1 text-4xl font-black">
+              {scores.teamA}
+            </p>
+          </div>
+
+          <span className="text-xl font-black text-white/25">
+            -
+          </span>
+
+          <div>
+            <p
+              className="text-xs font-black uppercase"
+              style={{ color: "#3B82F6" }}
+            >
+              Équipe B
+            </p>
+
+            <p className="mt-1 text-4xl font-black">
+              {scores.teamB}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 px-4 py-4">
+          {winner ? (
+            <>
+              <p className="font-black">
+                Équipe {winner} remporte le quart-temps
+              </p>
+
+              <p className="mt-1 text-sm font-bold text-white/50">
+                +1 point Basket
+              </p>
+            </>
+          ) : (
+            <p className="font-black">
+              Quart-temps à égalité
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onContinue}
+          className="mt-6 w-full rounded-xl px-5 py-3 font-black text-white transition hover:brightness-110"
+          style={{
+            backgroundColor: "#F47B20",
+          }}
+        >
+          Continuer
+        </button>
+      </div>
+    </div>
+  );
+}

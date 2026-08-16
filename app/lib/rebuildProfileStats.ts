@@ -98,7 +98,9 @@ export async function rebuildProfileStats(
     competitionIds.length > 0
     ? await supabase
     .from("competitions")
-    .select("id, competition_type, status, winner_player_id")
+.select(
+  "id, competition_type, status, winner_player_id, winner_team"
+)
     .in("id", competitionIds)
     : { data: [], error: null };
     
@@ -126,6 +128,17 @@ export async function rebuildProfileStats(
       )
       .map((competition) => competition.id)
     );
+    const basketCompetitionIds = new Set(
+  (competitions ?? [])
+    .filter(
+      (competition) =>
+        competition.competition_type === "basket"
+    )
+    .map((competition) => competition.id)
+);
+
+const basketCompetitionIdList =
+  Array.from(basketCompetitionIds);
     const grandPrixCompetitionIdList =
     Array.from(grandPrixCompetitionIds);
     
@@ -143,7 +156,93 @@ export async function rebuildProfileStats(
     )
     .eq("profile_id", profileId)
     : { data: [], error: null };
-    
+    const {
+  data: basketCompetitionPlayers,
+  error: basketPlayersError,
+} =
+  basketCompetitionIdList.length > 0
+    ? await supabase
+        .from("competition_players")
+        .select(
+          "id, competition_id, profile_id"
+        )
+        .in(
+          "competition_id",
+          basketCompetitionIdList
+        )
+        .eq("profile_id", profileId)
+    : { data: [], error: null };
+
+if (basketPlayersError) {
+  console.error(
+    "Erreur rebuild stats - joueurs Basket",
+    basketPlayersError
+  );
+
+  return false;
+}
+const basketCompetitionPlayerIds =
+  (basketCompetitionPlayers ?? []).map(
+    (player) => player.id
+  );
+
+const {
+  data: basketTeamLinks,
+  error: basketTeamLinksError,
+} =
+  basketCompetitionPlayerIds.length > 0
+    ? await supabase
+        .from("competition_basket_players")
+        .select(
+          "competition_player_id, competition_id, team"
+        )
+        .in(
+          "competition_player_id",
+          basketCompetitionPlayerIds
+        )
+    : { data: [], error: null };
+
+if (basketTeamLinksError) {
+  console.error(
+    "Erreur rebuild stats - équipes Basket",
+    basketTeamLinksError
+  );
+
+  return false;
+}
+const {
+  data: basketMatches,
+  error: basketMatchesError,
+} =
+  basketCompetitionIdList.length > 0
+    ? await supabase
+        .from("competition_basket_matches")
+        .select(
+          `
+          id,
+          competition_id,
+          game_id,
+          status,
+          winner_team,
+          team_a_basket_points,
+          team_b_basket_points
+          `
+        )
+        .in(
+          "competition_id",
+          basketCompetitionIdList
+        )
+        .eq("status", "finished")
+    : { data: [], error: null };
+
+if (basketMatchesError) {
+  console.error(
+    "Erreur rebuild stats - matchs Basket",
+    basketMatchesError
+  );
+
+  return;
+}
     if (grandPrixPlayersError) {
       console.error(
         "Erreur rebuild stats - pilotes Grand Prix",
@@ -223,6 +322,12 @@ console.log("Nombre total de scores récupérés :", scoreRows.length);
       grand_prix_podiums: 0,
       grand_prix_seasons_completed: 0,
       grand_prix_titles: 0,
+      basket_competitions: 0,
+basket_competition_wins: 0,
+basket_matches: 0,
+basket_match_wins: 0,
+basket_quarter_wins: 0,
+basket_sweeps: 0,
     };
     
     for (const game of games) {
@@ -385,6 +490,118 @@ console.log("Nombre total de scores récupérés :", scoreRows.length);
     if (playerCount === 5) stats.games_5_players += 1;
     if (playerCount === 6) stats.games_6_players += 1;
   }
+  const basketPlayerByCompetitionId = new Map<
+  string,
+  {
+    id: string;
+    competition_id: string;
+    team: "A" | "B";
+  }
+>();
+
+for (const player of basketCompetitionPlayers ?? []) {
+  const teamLink = (basketTeamLinks ?? []).find(
+    (link) =>
+      link.competition_player_id === player.id
+  );
+
+  if (!teamLink?.team) {
+    continue;
+  }
+
+  basketPlayerByCompetitionId.set(
+    player.competition_id,
+    {
+      id: player.id,
+      competition_id: player.competition_id,
+      team: teamLink.team as "A" | "B",
+    }
+  );
+}
+console.log("BASKET REBUILD CHECK", {
+  profileId,
+  basketCompetitionIdList,
+  basketCompetitionPlayers,
+  basketTeamLinks,
+  basketMatches,
+  basketPlayerMap: Array.from(
+    basketPlayerByCompetitionId.entries()
+  ),
+});
+for (const match of basketMatches ?? []) {
+  const basketPlayer =
+    basketPlayerByCompetitionId.get(
+      match.competition_id
+    );
+
+  if (!basketPlayer) {
+    continue;
+  }
+
+  stats.basket_matches += 1;
+
+  if (
+    match.winner_team === basketPlayer.team
+  ) {
+    stats.basket_match_wins += 1;
+  }
+
+  const myBasketPoints =
+    basketPlayer.team === "A"
+      ? Number(match.team_a_basket_points ?? 0)
+      : Number(match.team_b_basket_points ?? 0);
+
+  /*
+    Points Basket :
+    +4 victoire du match
+    +1 par quart-temps gagné.
+
+    Donc si l'équipe gagne le match :
+    quart-temps gagnés = points - 4
+
+    Sinon :
+    quart-temps gagnés = points
+  */
+  const quarterWins =
+    match.winner_team === basketPlayer.team
+      ? Math.max(0, myBasketPoints - 4)
+      : myBasketPoints;
+
+  stats.basket_quarter_wins += quarterWins;
+
+  if (
+    quarterWins === 4 &&
+    match.winner_team === basketPlayer.team
+  ) {
+    stats.basket_sweeps += 1;
+  }
+}
+for (const competition of competitions ?? []) {
+  if (
+    competition.competition_type !== "basket" ||
+    competition.status !== "finished"
+  ) {
+    continue;
+  }
+
+  const basketPlayer =
+    basketPlayerByCompetitionId.get(
+      competition.id
+    );
+
+  if (!basketPlayer) {
+    continue;
+  }
+
+  stats.basket_competitions += 1;
+
+  if (
+    competition.winner_team ===
+    basketPlayer.team
+  ) {
+    stats.basket_competition_wins += 1;
+  }
+}
   const grandPrixPlayerByCompetitionId = new Map(
   (grandPrixCompetitionPlayers ?? []).map(
     (competitionPlayer) => [
@@ -420,7 +637,15 @@ for (const competition of competitions ?? []) {
     stats.grand_prix_titles += 1;
   }
 }
-  
+  console.log("BASKET STATS AVANT RPC", {
+  profileId,
+  basket_competitions: stats.basket_competitions,
+  basket_competition_wins: stats.basket_competition_wins,
+  basket_matches: stats.basket_matches,
+  basket_match_wins: stats.basket_match_wins,
+  basket_quarter_wins: stats.basket_quarter_wins,
+  basket_sweeps: stats.basket_sweeps,
+});
   const rpcName = options?.admin
   ? "replace_profile_stats_admin"
   : "replace_my_profile_stats";

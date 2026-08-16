@@ -59,7 +59,7 @@ flagImage?: string;
   backgroundGlow?: string;
 
   headerGradient: string;
-  headerLogo: string;
+  headerLogo?: string;
 
   sheet?: {
     cardBackground: string;
@@ -67,7 +67,8 @@ flagImage?: string;
 
     totalBackground: string;
     totalText: string;
-
+bonusBackground?: string;
+bonusText?: string;
     finalBackground: string;
     finalText: string;
 
@@ -93,6 +94,7 @@ export const TOURNAMENT_THEMES: Record<
 TournamentTheme,
 TournamentThemeConfig
 > = {
+  
   australian_open: {
     id: "australian_open",
     name: "Open d’Australie",
@@ -261,6 +263,70 @@ headerLogo: "/us-open-logo.png",
 
 headerLogo: "/world-cup-trophy.png",
   },
+  basket: {
+  id: "basket",
+  name: "Basket",
+  shortName: "Basket",
+  icon: "🏀",
+
+  pageBackgroundColor: "#090705",
+  panelBackgroundColor: "#15100C",
+  border: "border-[#5A321C]",
+
+  accentBackground: "bg-[#F47B20]",
+  accentText: "text-[#FF9A52]",
+  accentDarkText: "text-[#7A2E00]",
+
+  courtBackground: "bg-[#2A160B]",
+  courtLine: "bg-white/10",
+
+  scoreBackground: "bg-[#F4E7D6]",
+  scoreText: "text-[#6D2600]",
+
+  buttonBackground: "bg-[#F47B20]",
+  buttonHover: "hover:bg-[#FF8B35]",
+  buttonText: "text-white",
+
+  backgroundImage: "/basket-arena.webp",
+
+backgroundGlow:
+  "radial-gradient(circle at 50% 10%, rgba(244,123,32,0.10) 0%, transparent 55%)",
+
+  headerGradient:
+    "linear-gradient(90deg, #0D0A08 0%, #2A160B 35%, #8C3D0D 50%, #2A160B 65%, #0D0A08 100%)",
+
+  sheet: {
+  // Cadre chaud beaucoup plus clair
+  cardBackground: "#E9D3B7",
+  cardBorder: "#D9772B",
+
+  // Totaux foncés pour conserver le contraste
+  totalBackground: "#4A210C",
+  totalText: "#FFFFFF",
+bonusBackground: "#C9864A",
+bonusText: "#FFFFFF",
+  // Ligne finale orange Basket
+  finalBackground: "#F47B20",
+  finalText: "#FFFFFF",
+
+  diceBorder: "#E86F18",
+  diceDot: "#7A2E00",
+
+  scoreText: "#3B1B0B",
+  activeText: "#E86F18",
+},
+
+leaderboard: {
+  border: "#D9772B",
+  background: "rgba(20, 12, 7, 0.88)",
+
+  titleText: "#FFAA63",
+  rankText: "#FFFFFF",
+
+  cardBorder: "#9A5426",
+  cardBackground: "rgba(54, 29, 14, 0.92)",
+},
+},
 };
 
 export function getTournamentTheme(theme: TournamentTheme) {

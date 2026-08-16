@@ -38,3 +38,12 @@ body {
 .recharts-active-dot:focus {
   outline: none !important;
 }
+.basket-chevron {
+  background-color: rgba(232, 117, 36, 0.15);
+  color: #e87524;
+}
+
+.group:hover .basket-chevron {
+  background-color: #e87524;
+  color: white;
+}

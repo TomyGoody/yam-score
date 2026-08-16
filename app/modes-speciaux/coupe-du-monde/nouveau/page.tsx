@@ -437,13 +437,7 @@ async function createWorldCup() {
   if (error || !data) {
   console.error("Erreur Supabase brute :", error);
 
-  console.log("Détails erreur Coupe du Monde :", {
-    message: error?.message ?? null,
-    details: error?.details ?? null,
-    hint: error?.hint ?? null,
-    code: error?.code ?? null,
-    data,
-  });
+  
 
   setErrorMessage(
     error

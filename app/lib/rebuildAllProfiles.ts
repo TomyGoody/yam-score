@@ -54,7 +54,11 @@ export async function rebuildAllProfiles() {
           admin: true,
         }
       );
-
+console.log("SYNC SUCCÈS REBUILD", {
+  profileId: profile.id,
+  username: profile.username,
+  achievementResult,
+});
       success += 1;
       totalXpAwarded += achievementResult.xpAwarded;
 
