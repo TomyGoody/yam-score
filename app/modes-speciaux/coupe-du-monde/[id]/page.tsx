@@ -402,6 +402,20 @@ router.push(
   `/?competitionId=${competition.id}&gameId=${result.game_id}&matchId=${matchId}`
 );
 }
+function openFinishedMatchHistory(
+  match: CompetitionMatch
+) {
+  if (
+    match.status !== "finished" ||
+    !match.game_id
+  ) {
+    return;
+  }
+
+  router.push(
+    `/profile/games/${match.game_id}`
+  );
+}
 async function resumeWorldCupMatch(
   match: CompetitionMatch
 ) {
@@ -671,6 +685,7 @@ async function abandonWorldCup() {
   }
   onOpenMatch={openMatchConfig}
   onResumeMatch={resumeWorldCupMatch}
+  onViewFinishedMatch={openFinishedMatchHistory}
   competitionStatus={competition.status}
 />
       ))}
@@ -924,6 +939,7 @@ function RoundColumn({
   onOpenMatch,
   onResumeMatch,
   competitionStatus,
+  onViewFinishedMatch,
 }: {
   roundNumber: number;
   matches: CompetitionMatch[];
@@ -933,8 +949,11 @@ function RoundColumn({
   onOpenMatch: (match: CompetitionMatch) => void;
   onResumeMatch: (match: CompetitionMatch) => void;
   competitionStatus: CompetitionStatus;
+  onViewFinishedMatch: (
+  match: CompetitionMatch
+) => void;
 }) {
-  const matchHeight = 240;
+  const matchHeight = 285;
   const baseGap = 20;
 
   const step = 2 ** (roundNumber - 1);
@@ -994,6 +1013,9 @@ function RoundColumn({
   isFinal={roundNumber === totalRounds}
   onOpen={() => onOpenMatch(match)}
   onResume={onResumeMatch}
+  onViewFinished={() =>
+    onViewFinishedMatch(match)
+  }
 />
 
               {hasNextRound && (
@@ -1091,6 +1113,7 @@ function WorldCupMatchCard({
   isFinal,
   onOpen,
   onResume,
+  onViewFinished,
 }: {
   match: CompetitionMatch;
   players: CompetitionPlayer[];
@@ -1098,6 +1121,7 @@ function WorldCupMatchCard({
   isFinal: boolean;
   onOpen: () => void;
   onResume: (match: CompetitionMatch) => void;
+  onViewFinished: () => void;
 }) {
   const player1 =
     players.find(
@@ -1228,6 +1252,20 @@ function WorldCupMatchCard({
     Reprendre le match
   </button>
 )}
+{match.status === "finished" &&
+  match.game_id && (
+    <button
+      type="button"
+      onClick={onViewFinished}
+      className="mt-auto w-full px-4 py-3 font-black text-white transition hover:brightness-110"
+      style={{
+        backgroundColor: "#0B6B3A",
+        borderTop: "1px solid #D0BCA2",
+      }}
+    >
+      Voir la feuille
+    </button>
+  )}
     </article>
   );
 }

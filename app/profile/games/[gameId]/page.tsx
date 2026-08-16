@@ -235,6 +235,7 @@ setHighContrast={setHighContrast}
       playerSheetProps={readOnlyPlayerSheetProps}
       LeaderboardComponent={Leaderboard}
       leaderboardProps={{
+        historyMode: true,
         players: players
           .map((player) => ({
             id: player.player_key,

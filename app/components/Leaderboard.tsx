@@ -17,6 +17,7 @@ export default function Leaderboard({
   gameFinished,
   onUndoLastMove,
   tournamentTheme,
+  historyMode = false,
 }: {
   players: Array<
     Player & {
@@ -29,8 +30,10 @@ export default function Leaderboard({
       yams: number;
       championshipPoints: number | null;
 provisionalGrandPrixPoints: number;
+
     }
   >;
+  historyMode?: boolean;
   layout: "side" | "bottom";
   currentPlayerId: string | null;
   gameFinished: boolean;
@@ -158,7 +161,8 @@ const isBasketTheme =
   </span>
 
   <div className="leading-tight text-right">
-    {player.championshipPoints !== null && (
+    {!historyMode &&
+  player.championshipPoints != null && (
       <>
         <div
           className={[

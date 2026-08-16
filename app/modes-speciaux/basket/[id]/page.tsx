@@ -941,6 +941,59 @@ export default function BasketCompetitionPage() {
 
   setMatchQuarterScores(result);
 }
+async function openBasketMatchHistory(
+  match: BasketMatch
+) {
+  if (
+    match.status !== "finished" ||
+    !match.game_id
+  ) {
+    return;
+  }
+
+  // Match Local : game_id est déjà un local_games.id
+  if (match.play_mode === "local") {
+    router.push(
+      `/profile/games/${match.game_id}`
+    );
+    return;
+  }
+
+  // Match Salon :
+  // on retrouve la copie créée dans local_games
+  const { data: historyGame, error } =
+    await supabase
+      .from("local_games")
+      .select("id")
+      .eq("competition_id", competitionId)
+      .eq("source", "salon")
+      .eq(
+        "competition_round_number",
+        match.match_number
+      )
+      .maybeSingle();
+
+  if (error || !historyGame) {
+    console.error(
+      "Historique Basket Salon introuvable",
+      {
+        matchId: match.id,
+        gameId: match.game_id,
+        error,
+      }
+    );
+
+    setErrorMessage(
+      "Impossible de retrouver la feuille de ce match."
+    );
+
+    return;
+  }
+
+  router.push(
+    `/profile/games/${historyGame.id}`
+  );
+}
             async function startBasketMatch(
                 match: BasketMatch,
                 mode: PlayMode
@@ -1537,15 +1590,18 @@ export default function BasketCompetitionPage() {
                                             {matches.map(
                                                 (match) => (
                                                     <MatchCard
-                                                    key={match.id}
-                                                    match={match}
-                                                    active={
-                                                        activeMatch?.id === match.id
-                                                    }
-                                                    quarterScores={
-                                                        matchQuarterScores[match.id] ?? null
-                                                    }
-                                                    />
+  key={match.id}
+  match={match}
+  active={
+    activeMatch?.id === match.id
+  }
+  quarterScores={
+    matchQuarterScores[match.id] ?? null
+  }
+  onViewHistory={() =>
+    openBasketMatchHistory(match)
+  }
+/>
                                                 )
                                             )}
                                             </div>
@@ -1807,17 +1863,19 @@ export default function BasketCompetitionPage() {
                                                     }
                                                     
                                                     function MatchCard({
-                                                        match,
-                                                        active,
-                                                        quarterScores,
-                                                    }: {
-                                                        match: BasketMatch;
-                                                        active: boolean;
-                                                        quarterScores: Record<
-                                                        1 | 2 | 3 | 4,
-                                                        QuarterScore
-                                                        > | null;
-                                                    }) {
+  match,
+  active,
+  quarterScores,
+  onViewHistory,
+}: {
+  match: BasketMatch;
+  active: boolean;
+  quarterScores: Record<
+    1 | 2 | 3 | 4,
+    QuarterScore
+  > | null;
+  onViewHistory: () => void;
+}) {
                                                         const finished =
                                                         match.status ===
                                                         "finished";
@@ -2068,6 +2126,18 @@ export default function BasketCompetitionPage() {
                                                                             </div>
                                                                             </div>
                                                                         )}
+                                                                        {finished && match.game_id && (
+  <button
+    type="button"
+    onClick={onViewHistory}
+    className="mt-4 w-full rounded-xl px-4 py-3 font-black text-white transition hover:brightness-110"
+    style={{
+      backgroundColor: BASKET,
+    }}
+  >
+    Voir la feuille
+  </button>
+)}
                                                                         </article>
                                                                     );
                                                                 }

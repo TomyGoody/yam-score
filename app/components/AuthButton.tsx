@@ -243,8 +243,10 @@ setXpPercent(0);
 
   <div className="hidden min-w-0 flex-1 sm:block">
     <div className="truncate text-sm font-black text-white">
-      {displayName}
-    </div>
+  {username
+    ? `@${username.charAt(0).toUpperCase()}${username.slice(1)}`
+    : displayName}
+</div>
 
     <div className="mt-1 flex items-center gap-2">
       <span className="shrink-0 text-[10px] font-bold text-slate-400">
