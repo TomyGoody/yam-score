@@ -124,13 +124,15 @@ const activeTurnColor =
       ? activeTheme?.border ?? "border-[#CFAF95]"
       : "",
   ].join(" ")}
-  style={{
-  background:
-    activeTheme?.sheet?.cardBackground ??
-    "linear-gradient(135deg, #F7EFE6 0%, #F1E2D4 100%)",
+ style={{
+  background: highContrast
+    ? "#000000"
+    : activeTheme?.sheet?.cardBackground ??
+      "linear-gradient(135deg, #F7EFE6 0%, #F1E2D4 100%)",
 
-  borderColor:
-    isBasketTheme && basketTeamColor
+  borderColor: highContrast
+    ? "#FFFFFF"
+    : isBasketTheme && basketTeamColor
       ? basketTeamColor
       : activeTheme?.sheet?.cardBorder,
 }}
@@ -179,11 +181,11 @@ const activeTurnColor =
   )}
 
   <h2
-    className="text-xl font-black"
-    style={{
-      color: "#241812",
-    }}
-  >
+  className="text-xl font-black"
+  style={{
+    color: highContrast ? "#FFFFFF" : "#241812",
+  }}
+>
     {player.name}
   </h2>
 
@@ -209,8 +211,10 @@ const activeTurnColor =
         : "text-[#B84332]",
   ].join(" ")}
   style={{
-    color: activeScoreColor ?? undefined,
-  }}
+  color: highContrast
+    ? "#FFFFFF"
+    : activeScoreColor ?? undefined,
+}}
 >
   {getPlayerTotal(player.id)}
 </div>
@@ -225,7 +229,9 @@ const activeTurnColor =
         : "text-[#B84332]",
   ].join(" ")}
   style={{
-    color: activeScoreColor ?? undefined,
+    color: highContrast
+      ? "#FFFFFF"
+      : activeScoreColor ?? undefined,
   }}
 >
       {lastScoreAnimation.value === "X"
@@ -245,8 +251,10 @@ const activeTurnColor =
         : "text-[#B84332]",
   ].join(" ")}
   style={{
-    color: activeTurnColor ?? undefined,
-  }}
+  color: highContrast
+    ? "#FFFFFF"
+    : activeTurnColor ?? undefined,
+}}
 >
   ▶ Ton tour
 </div>
@@ -408,8 +416,13 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
         index > 0 &&
         activeColumns[index - 1].type !== column.type;
         if (index > 0 && activeColumns[index - 1].type !== column.type) {
-          items.push(<div key={`gap-${row.id}-${column.id}`} />);
-        }
+  items.push(
+    <div
+      key={`gap-${row.id}-${column.id}`}
+      className={highContrast ? "bg-black" : ""}
+    />
+  );
+}
         
         items.push(
           <ScoreGridCell
@@ -444,18 +457,25 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
         const items: React.ReactNode[] = [];
         
         if (index > 0 && activeColumns[index - 1].type !== column.type) {
-          items.push(<div key={`head-gap-${column.id}`} />);
-        }
+  items.push(
+    <div
+      key={`head-gap-${column.id}`}
+      className={highContrast ? "bg-black" : ""}
+    />
+  );
+}
         
         items.push(
           <div
   key={column.id}
   className="h-7 text-xl"
   style={{
-    color: isBasketTheme
-  ? "#6B3214"
-  : "#241812",
-  }}
+  color: highContrast
+    ? "#FFFFFF"
+    : isBasketTheme
+      ? "#6B3214"
+      : "#241812",
+}}
 >
           {column.type === "down" && "↓"}
           {column.type === "free" && "L"}
@@ -500,6 +520,7 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
   cells={activeColumns.map((column) => getTopTotal(player.id, column.id))}
   activeColumns={activeColumns}
   gridColumns={gridColumns}
+  highContrast={highContrast}
   labelClassName={
     highContrast || sheetTheme
       ? undefined
@@ -537,6 +558,7 @@ const highContrastFinalStyle: React.CSSProperties | undefined =
       cells={activeColumns.map((column) => getBonus(player.id, column.id))}
       activeColumns={activeColumns}
       gridColumns={gridColumns}
+      highContrast={highContrast}
       labelClassName={
   highContrast || sheetTheme
     ? undefined
@@ -582,6 +604,7 @@ color:
       cells={activeColumns.map(
         (column) => getTopTotal(player.id, column.id) + getBonus(player.id, column.id)
       )}
+      highContrast={highContrast}
       activeColumns={activeColumns}
       gridColumns={gridColumns}
       labelClassName={
@@ -693,6 +716,7 @@ labelStyle={
       label="Total"
       cells={activeColumns.map((column) => getBottomTotal(player.id, column.id))}
       activeColumns={activeColumns}
+      highContrast={highContrast}
       gridColumns={gridColumns}
       labelClassName={
   highContrast || sheetTheme ? undefined : "bg-[#EABF9F] text-[#241812]"
@@ -727,6 +751,7 @@ cellStyle={
       
       <TotalGridRow
       label="Final"
+      highContrast={highContrast}
       cells={activeColumns.map((column) => getGrandTotal(player.id, column.id))}
       activeColumns={activeColumns}
       gridColumns={gridColumns}
@@ -976,7 +1001,9 @@ function getHighContrastBottomColor(rowId: YamRow) {
   labelStyle,
   cellStyle,
   isFirstRow = false,
+  highContrast,
 }: {
+  highContrast: boolean;
     label: string;
     cells: number[];
     activeColumns: typeof columns;
@@ -987,6 +1014,7 @@ cellClassName?: string;
 labelStyle?: React.CSSProperties;
 cellStyle?: React.CSSProperties;
     isFirstRow?: boolean;
+    
   }) {
     return (
       <>
@@ -1010,7 +1038,12 @@ cellStyle?: React.CSSProperties;
           index > 0 &&
           activeColumns[index - 1].type !== activeColumns[index].type
         ) {
-          items.push(<div key={`gap-total-${index}`} />);
+          items.push(
+  <div
+    key={`gap-total-${index}`}
+    className={highContrast ? "bg-black" : ""}
+  />
+);
         }
         
         items.push(

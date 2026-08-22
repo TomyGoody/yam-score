@@ -321,7 +321,7 @@ function getGrandPrixPoints(rank: number) {
   : null;
             const playerOrder = player.player_order ?? player.playerOrder;
 const useDarkXpText =
-  !tournamentTheme && player.rank !== 1;
+  player.rank === 1 && !!tournamentTheme;
             return (
               <div
                 key={player.id}
